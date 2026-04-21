@@ -55,9 +55,30 @@ import Layout from "../layouts/Layout.astro";
       fetch('/api/map').then(function(r){return r.json()})
     ]).then(function(r){wo=r[0];al=r[1];document.getElementById('cnt').textContent=al.length+' alumni';buildClu();draw()});
 
-    function buildClu(){clu=[];var u={};al.forEach(function(d,i){if(!d.latitude||!d.longitude||u[i])return;var g=[d];u[i]=true;for(var j=i+1;j<al.length;j++){if(u[j]||!al[j].latitude||!al[j].longitude)continue;if(Math.abs(d.latitude-al[j].latitude)<0.05&&Math.abs(d.longitude-al[j].longitude)<0.05){g.push(al[j]);u[j]=true}}clu.push({la:d.latitude,lo:d.longitude,m:g})})}
-
+    function buildClu(){
+      clu=[];if(!al)return;
+      // Threshold in degrees - shrinks as zoom increases
+      // zm=1: ~2 deg (merge cities in same region), zm=10: ~0.1 deg, zm=40+: ~0.01 deg
+      var thr=Math.max(0.01, 2.0/zm);
+      var u={};
+      al.forEach(function(d,i){
+        if(!d.latitude||!d.longitude||u[i])return;
+        var g=[d];u[i]=true;
+        for(var j=i+1;j<al.length;j++){
+          if(u[j]||!al[j].latitude||!al[j].longitude)continue;
+          if(Math.abs(d.latitude-al[j].latitude)<thr&&Math.abs(d.longitude-al[j].longitude)<thr){
+            g.push(al[j]);u[j]=true;
+          }
+        }
+        // Cluster center = average of all members
+        var avgLa=0,avgLo=0;
+        g.forEach(function(m){avgLa+=m.latitude;avgLo+=m.longitude});
+        avgLa/=g.length;avgLo/=g.length;
+        clu.push({la:avgLa,lo:avgLo,m:g});
+      });
+    }
     function draw(){
+      buildClu();
       ctx.clearRect(0,0,wW,wH);if(!wo)return;
       var s=bs*zm;proj.scale(s).translate([wW/2,wH/2]);
       ctx.beginPath();ctx.arc(wW/2,wH/2,s,0,2*Math.PI);ctx.fillStyle='#f5f0e8';ctx.fill();ctx.strokeStyle='#b8956a';ctx.lineWidth=1.5;ctx.stroke();
@@ -96,7 +117,7 @@ import Layout from "../layouts/Layout.astro";
         }
       }
       be.innerHTML=cards;be.classList.remove('hidden');
-      if(n>1){driftTimer=setInterval(function(){var els=be.querySelectorAll('.bc');for(var i=0;i<els.length;i++){var bx=parseFloat(els[i].getAttribute('data-bx')),by=parseFloat(els[i].getAttribute('data-by'));els[i].style.left=Math.max(90,Math.min(wW-90,bx+(Math.random()-.5)*60))+'px';els[i].style.top=Math.max(20,Math.min(wH-30,by+(Math.random()-.5)*60))+'px'}},3000)}
+      if(n>1){driftTimer=setInterval(function(){var els=be.querySelectorAll('.bc');for(var i=0;i<els.length;i++){var bx=parseFloat(els[i].getAttribute('data-bx')),by=parseFloat(els[i].getAttribute('data-by'));els[i].style.left=Math.max(90,Math.min(wW-90,bx+(Math.random()-.5)*60))+'px';els[i].style.top=Math.max(20,Math.min(wH-30,by+(Math.random()-.5)*60))+'px';els[i].style.zIndex=Math.floor(Math.random()*els.length)}},3000)}
     }
     function hideBurst(){bv=false;be.classList.add('hidden');be.innerHTML='';be._cid=null;if(driftTimer){clearInterval(driftTimer);driftTimer=null}}
     function findCluster(mx,my){var ro=proj.rotate();for(var i=0;i<clu.length;i++){var c=clu[i],a=d3.geoDistance([c.lo,c.la],[-ro[0],-ro[1]]);if(a>Math.PI/2)continue;var p=proj([c.lo,c.la]);if(!p)continue;var r=Math.max(4,Math.min(9,bs*zm/100));if(c.m.length>1)r=Math.min(14,r+c.m.length*0.8);if((mx-p[0])*(mx-p[0])+(my-p[1])*(my-p[1])<(r+12)*(r+12)){c._x=p[0];c._y=p[1];return c}}return null}
@@ -107,14 +128,14 @@ import Layout from "../layouts/Layout.astro";
 
     // === MOUSE DRAG (all devices) ===
     var dr=false,sx,sy;
-    wrap.addEventListener('mousedown',function(e){dr=true;sx=e.clientX;sy=e.clientY;wrap.style.cursor='grabbing';hideBurst()});
+    wrap.addEventListener('mousedown',function(e){if(Date.now()-lastTouch<500)return;dr=true;sx=e.clientX;sy=e.clientY;wrap.style.cursor='grabbing';hideBurst()});
     window.addEventListener('mousemove',function(e){if(!dr)return;var r=proj.rotate(),sn=.25/zm;proj.rotate([r[0]+(e.clientX-sx)*sn,Math.max(-89,Math.min(89,r[1]-(e.clientY-sy)*sn))]);sx=e.clientX;sy=e.clientY;draw()});
     window.addEventListener('mouseup',function(){dr=false;wrap.style.cursor='grab'});
 
     // === DESKTOP: hover to show burst (@media hover:hover) ===
     if(isHover){
       wrap.addEventListener('mousemove',function(e){
-        if(dr||!clu.length||!loggedIn)return;
+        if(dr||!clu.length||!loggedIn||Date.now()-lastTouch<500)return;
         var rc=wrap.getBoundingClientRect(),hit=findCluster(e.clientX-rc.left,e.clientY-rc.top);
         if(hit){wrap.style.cursor='pointer';showBurst(hit)}
         else if(!dr){wrap.style.cursor='grab';if(bv)hideBurst()}
@@ -122,8 +143,9 @@ import Layout from "../layouts/Layout.astro";
     }
 
     // === CLICK/TAP to toggle burst (all devices) ===
-    var clickN=0,clickT=null;
+    var clickN=0,clickT=null,lastTouch=0;
     wrap.addEventListener('click',function(e){
+      if(Date.now()-lastTouch<500)return;
       clickN++;
       if(clickN===1){
         clickT=setTimeout(function(){
@@ -152,7 +174,7 @@ import Layout from "../layouts/Layout.astro";
       else if(e.touches.length===1&&td){var dx=e.touches[0].clientX-tapX,dy=e.touches[0].clientY-tapY;if(Math.abs(dx)>8||Math.abs(dy)>8)tapMoved=true;var r=proj.rotate(),sn=.25/zm;proj.rotate([r[0]+(e.touches[0].clientX-sx)*sn,Math.max(-89,Math.min(89,r[1]-(e.touches[0].clientY-sy)*sn))]);sx=e.touches[0].clientX;sy=e.touches[0].clientY;draw()}
     },{passive:false});
     wrap.addEventListener('touchend',function(e){
-      td=false;
+      td=false;lastTouch=Date.now();
       if(tapMoved||!loggedIn||!clu.length||e.changedTouches.length!==1)return;
       var rc=wrap.getBoundingClientRect(),mx=e.changedTouches[0].clientX-rc.left,my=e.changedTouches[0].clientY-rc.top;
       var hit=findCluster(mx,my);
