@@ -1,0 +1,106 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Profil - 7099 Alumni">
+  <div id="loading" class="min-h-screen flex items-center justify-center"><div class="text-stone-400">Memuat...</div></div>
+  <div id="not-logged" class="hidden min-h-screen flex items-center justify-center px-4"><div class="text-center"><p class="text-stone-500 mb-4">Kamu belum masuk</p><a href="/login" class="bg-amber-800 text-white px-6 py-3 rounded-xl font-semibold hover:bg-amber-900 transition">Masuk / Daftar</a></div></div>
+
+  <div id="profile-content" class="hidden">
+    <nav class="bg-white shadow-sm sticky top-0 z-50"><div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between"><a href="/" class="text-xl font-bold text-amber-900">Alumni SMU 70 Angkatan 99</a><div class="flex items-center gap-4"><span class="text-sm text-stone-600" id="nav-name"></span><button type="button" onclick="logout()" class="text-sm text-red-600 hover:underline">Keluar</button></div></div></nav>
+
+    <div class="max-w-2xl mx-auto px-4 py-8">
+      <div id="match-banner" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6"><p class="text-amber-800 font-medium text-sm">✅ Data kamu ditemukan di database alumni! Silakan cek dan perbarui jika perlu.</p></div>
+
+      <div id="no-match-banner" class="hidden bg-stone-100 border border-stone-200 rounded-xl p-4 mb-6">
+        <p class="text-stone-700 font-medium text-sm mb-3">Data kamu belum ada di database. Cari nama kamu atau isi data baru:</p>
+        <input type="text" id="search-input" placeholder="Cari nama..." class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm" oninput="searchAlumni(this.value)">
+        <div id="search-results" class="mt-2"></div>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8">
+        <h2 class="text-xl font-bold text-stone-800 mb-6">Data Profil</h2>
+        <div id="save-msg" class="hidden bg-green-50 text-green-700 text-sm p-3 rounded-lg mb-4"></div>
+        <div id="save-err" class="hidden bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-4"></div>
+        <form id="profile-form" onsubmit="saveProfile(event)">
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">Nama Lengkap *</label>
+              <input type="text" name="name" required class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">Nama Panggilan</label>
+              <input type="text" name="nickname" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">Tanggal Lahir</label>
+              <input type="date" name="birthday" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">Jenis Kelamin</label>
+              <select name="gender" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white">
+                <option value="">-- Pilih --</option>
+                <option value="Pria">Pria</option>
+                <option value="Wanita">Wanita</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">No. Telepon</label>
+              <input type="tel" name="phone" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">Kota</label>
+              <input type="text" name="city" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">Negara</label>
+              <input type="text" name="country" value="Indonesia" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-stone-700 mb-1">Pekerjaan</label>
+              <input type="text" name="job_title" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-stone-700 mb-1">Alamat</label>
+              <input type="text" name="address" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" placeholder="Jl. Contoh No. 1, Kecamatan, Kota">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-stone-700 mb-1">Perusahaan / Bidang Usaha</label>
+              <input type="text" name="company" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-stone-700 mb-1">Universitas <span class="text-stone-400 font-normal">(pisahkan dengan koma jika lebih dari satu)</span></label>
+              <input type="text" name="university" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" placeholder="UI, ITB, UGM">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-stone-700 mb-1">Hobi &amp; Minat <span class="text-stone-400 font-normal">(pisahkan dengan koma)</span></label>
+              <input type="text" name="hobby" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" placeholder="sports, music, photography, cooking">
+            </div>
+          </div>
+          <button type="submit" class="mt-6 w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition">Simpan</button>
+        </form>
+      </div>
+      <div class="text-center mt-6"><a href="/" class="text-sm text-amber-700 hover:underline">&larr; Kembali ke Beranda</a></div>
+    </div>
+  </div>
+
+  <script is:inline>
+    var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university"];
+
+    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}}catch(e){showNotLogged()}}
+
+    function showNotLogged(){document.getElementById("loading").classList.add("hidden");document.getElementById("not-logged").classList.remove("hidden")}
+
+    function fillForm(p){var f=document.getElementById("profile-form");FIELDS.forEach(function(k){if(p[k]&&f[k]){if(k==="gender"){f[k].value=p[k]}else{f[k].value=p[k]}}})}
+
+    async function saveProfile(e){e.preventDefault();var f=e.target;var b={};FIELDS.forEach(function(k){b[k]=f[k]?f[k].value:""});try{var r=await fetch("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify(b)});var d=await r.json();if(!r.ok){document.getElementById("save-err").textContent=d.error;document.getElementById("save-err").classList.remove("hidden");return}document.getElementById("save-msg").textContent="✅ Profil berhasil disimpan!";document.getElementById("save-msg").classList.remove("hidden");document.getElementById("save-err").classList.add("hidden");document.getElementById("no-match-banner").classList.add("hidden");document.getElementById("match-banner").classList.remove("hidden");setTimeout(function(){document.getElementById("save-msg").classList.add("hidden")},3000)}catch(e){document.getElementById("save-err").textContent="Gagal menyimpan.";document.getElementById("save-err").classList.remove("hidden")}}
+
+    var st;function searchAlumni(q){clearTimeout(st);if(q.length<2){document.getElementById("search-results").innerHTML="";return}st=setTimeout(async function(){var r=await fetch("/api/alumni/search?q="+encodeURIComponent(q),{credentials:"include"});var d=await r.json();var c=document.getElementById("search-results");if(!d.length){c.innerHTML='<p class="text-sm text-stone-500">Tidak ditemukan. Isi data baru di bawah.</p>';return}c.innerHTML=d.map(function(r){return '<button onclick="linkAlumni('+r.id+')" class="block w-full text-left px-3 py-2 text-sm hover:bg-amber-50 rounded-lg"><b>'+r.name+'</b> ('+r.nickname+') - '+r.city+'</button>'}).join("")},300)}
+
+    async function linkAlumni(id){var r=await fetch("/api/profile/link",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({alumni_id:id})});var d=await r.json();if(d.success){fillForm(d.profile);document.getElementById("no-match-banner").classList.add("hidden");document.getElementById("match-banner").classList.remove("hidden");document.getElementById("save-msg").textContent="✅ Data berhasil ditautkan!";document.getElementById("save-msg").classList.remove("hidden")}}
+
+    async function logout(){await fetch("/api/auth/logout",{method:"POST",credentials:"include"});window.location.href="/login"}
+
+    loadProfile();
+  </script>
+</Layout>
