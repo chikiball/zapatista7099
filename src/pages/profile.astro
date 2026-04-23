@@ -76,16 +76,31 @@ import Layout from "../layouts/Layout.astro";
               <label class="block text-sm font-medium text-stone-700 mb-1">Hobi &amp; Minat <span class="text-stone-400 font-normal">(pisahkan dengan koma)</span></label>
               <input type="text" name="hobby" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" placeholder="sports, music, photography, cooking">
             </div>
+          <div class="md:col-span-2"><label class="block text-sm font-medium text-stone-700 mb-1">Kelas waktu kelas 3</label><select name="class" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"><option value="">-- Pilih --</option><option value="IPA 1">IPA 1</option><option value="IPA 2">IPA 2</option><option value="IPA 3">IPA 3</option><option value="IPA 4">IPA 4</option><option value="IPA 5">IPA 5</option><option value="IPA 6">IPA 6</option><option value="IPA 7">IPA 7</option><option value="IPA 8">IPA 8</option><option value="IPS 1">IPS 1</option><option value="IPS 2">IPS 2</option><option value="IPS 3">IPS 3</option><option value="IPS 4">IPS 4</option></select></div>
           </div>
           <button type="submit" class="mt-6 w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition">Simpan</button>
         </form>
+      </div>
+
+      <!-- Photo Upload Section -->
+      <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6" id="photo-section">
+        <h2 class="text-xl font-bold text-stone-800 mb-4">Foto</h2>
+        <div id="photo-grid" class="grid grid-cols-3 gap-3 mb-4"></div>
+        <label class="block">
+          <span class="w-full bg-amber-50 border-2 border-dashed border-amber-300 text-amber-800 rounded-xl px-4 py-6 font-medium text-sm text-center cursor-pointer hover:bg-amber-100 transition flex flex-col items-center gap-2">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            Upload Foto (max 5MB, bisa pilih beberapa)
+            <input type="file" id="photo-input" accept="image/*" multiple class="hidden">
+          </span>
+        </label>
+        <div id="upload-msg" class="hidden text-sm mt-2"></div>
       </div>
       <div class="text-center mt-6"><a href="/" class="text-sm text-amber-700 hover:underline">&larr; Kembali ke Beranda</a></div>
     </div>
   </div>
 
   <script is:inline>
-    var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university"];
+    var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university","class"];
 
     async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}}catch(e){showNotLogged()}}
 
@@ -100,6 +115,39 @@ import Layout from "../layouts/Layout.astro";
     async function linkAlumni(id){var r=await fetch("/api/profile/link",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({alumni_id:id})});var d=await r.json();if(d.success){fillForm(d.profile);document.getElementById("no-match-banner").classList.add("hidden");document.getElementById("match-banner").classList.remove("hidden");document.getElementById("save-msg").textContent="✅ Data berhasil ditautkan!";document.getElementById("save-msg").classList.remove("hidden")}}
 
     async function logout(){await fetch("/api/auth/logout",{method:"POST",credentials:"include"});window.location.href="/login"}
+
+    
+    // Photo functions
+    function loadPhotos(){
+      fetch('/api/profile/photos',{credentials:'include'}).then(function(r){return r.json()}).then(function(photos){
+        var grid=document.getElementById('photo-grid');
+        if(!grid)return;
+        grid.innerHTML='';
+        photos.forEach(function(p){
+          var div=document.createElement('div');
+          div.style.cssText='position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:#f5f0e8';
+          div.innerHTML='<img src="/photos/'+p.filename+'" style="width:100%;height:100%;object-fit:cover"><button type="button" onclick="deletePhoto('+p.id+')" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;line-height:24px;text-align:center">&times;</button>';
+          grid.appendChild(div);
+        });
+      }).catch(function(){});
+    }
+    function deletePhoto(id){
+      if(!confirm('Hapus foto ini?'))return;
+      fetch('/api/profile/photos/'+id,{method:'DELETE',credentials:'include'}).then(function(r){return r.json()}).then(function(){loadPhotos()});
+    }
+    document.getElementById('photo-input').addEventListener('change',function(e){
+      var files=e.target.files;if(!files.length)return;
+      var form=new FormData();
+      for(var i=0;i<files.length;i++)form.append('photos',files[i]);
+      var msg=document.getElementById('upload-msg');
+      msg.textContent='Mengupload...';msg.className='text-sm mt-2 text-amber-700';
+      fetch('/api/profile/photos',{method:'POST',credentials:'include',body:form}).then(function(r){return r.json()}).then(function(d){
+        if(d.success){msg.textContent='✅ '+d.photos.length+' foto berhasil diupload';msg.className='text-sm mt-2 text-green-700';loadPhotos()}
+        else{msg.textContent='❌ '+d.error;msg.className='text-sm mt-2 text-red-700'}
+        e.target.value='';
+        setTimeout(function(){msg.className='hidden'},3000);
+      }).catch(function(){msg.textContent='❌ Upload gagal';msg.className='text-sm mt-2 text-red-700'});
+    });
 
     loadProfile();
   </script>

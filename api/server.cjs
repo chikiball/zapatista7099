@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const multer = require("multer");
+const fs = require("fs");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Database = require("better-sqlite3");
@@ -40,6 +42,22 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+// Photo upload config
+const storage = multer.diskStorage({
+  destination: function(req, file, cb) { cb(null, require("path").join(__dirname, "..", "public", "photos")) },
+  filename: function(req, file, cb) {
+    var ext = file.originalname.split(".").pop();
+    cb(null, Date.now() + "-" + Math.random().toString(36).substr(2,6) + "." + ext);
+  }
+});
+const upload = multer({ storage: storage, limits: { fileSize: 5*1024*1024 }, fileFilter: function(req,file,cb){
+  if(file.mimetype.startsWith("image/")) cb(null,true); else cb(new Error("Only images allowed"));
+}});
+
+// Photos table
+db.exec("CREATE TABLE IF NOT EXISTS photos (id INTEGER PRIMARY KEY AUTOINCREMENT, alumni_id INTEGER REFERENCES alumni(id), filename TEXT NOT NULL, original_name TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
+
 
 // ── Auth Middleware ──────────────────────────────────
 function authMiddleware(req, res, next) {
@@ -230,21 +248,21 @@ app.get("/api/profile", authMiddleware, (req, res) => {
 // Update or create profile
 app.put("/api/profile", authMiddleware, (req, res) => {
   try {
-    const { name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university } = req.body;
+    const { name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, class: kelas } = req.body;
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
 
     if (user.alumni_id) {
       // Update existing alumni record
       db.prepare(`
-        UPDATE alumni SET name=?, nickname=?, phone=?, city=?, country=?, job_title=?, company=?, bio=?, birthday=?, gender=?, address=?, hobby=?, university=?
+        UPDATE alumni SET name=?, nickname=?, phone=?, city=?, country=?, job_title=?, company=?, bio=?, birthday=?, gender=?, address=?, hobby=?, university=?, class=?
         WHERE id=?
-      `).run(name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, user.alumni_id);
+      `).run(name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas, user.alumni_id);
     } else {
       // Create new alumni record and link
       const result = db.prepare(`
-        INSERT INTO alumni (name, nickname, email, phone, city, country, job_title, company, bio, is_public, birthday, gender, address, hobby, university)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
-      `).run(name, nickname, user.email, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university);
+        INSERT INTO alumni (name, nickname, email, phone, city, country, job_title, company, bio, is_public, birthday, gender, address, hobby, university, class)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+      `).run(name, nickname, user.email, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas);
       db.prepare("UPDATE users SET alumni_id = ?, name = ? WHERE id = ?").run(result.lastInsertRowid, name, user.id);
     }
 
@@ -280,6 +298,45 @@ app.post("/api/profile/link", authMiddleware, (req, res) => {
 
   db.prepare("UPDATE users SET alumni_id = ?, name = ? WHERE id = ?").run(alumni_id, alumni.name, req.user.id);
   res.json({ success: true, profile: alumni });
+});
+
+
+// ── PHOTO ROUTES ────────────────────────────────────
+
+// Upload photos
+app.post("/api/profile/photos", authMiddleware, upload.array("photos", 10), (req, res) => {
+  try {
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+    if (!user || !user.alumni_id) return res.status(400).json({ error: "No profile linked" });
+    const insert = db.prepare("INSERT INTO photos (alumni_id, filename, original_name) VALUES (?, ?, ?)");
+    const saved = [];
+    for (const file of req.files) {
+      insert.run(user.alumni_id, file.filename, file.originalname);
+      saved.push({ filename: file.filename, original_name: file.originalname });
+    }
+    res.json({ success: true, photos: saved });
+  } catch(e) {
+    console.error("Photo upload error:", e);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+// Get photos for current user
+app.get("/api/profile/photos", authMiddleware, (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  if (!user || !user.alumni_id) return res.json([]);
+  const photos = db.prepare("SELECT * FROM photos WHERE alumni_id = ? ORDER BY created_at DESC").all(user.alumni_id);
+  res.json(photos);
+});
+
+// Delete a photo
+app.delete("/api/profile/photos/:id", authMiddleware, (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  const photo = db.prepare("SELECT * FROM photos WHERE id = ? AND alumni_id = ?").get(req.params.id, user.alumni_id);
+  if (!photo) return res.status(404).json({ error: "Photo not found" });
+  try { fs.unlinkSync(require("path").join(__dirname, "..", "public", "photos", photo.filename)); } catch(e) {}
+  db.prepare("DELETE FROM photos WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
 });
 
 // ── PUBLIC ROUTES ───────────────────────────────────
