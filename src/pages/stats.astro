@@ -1,0 +1,274 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Statistik - 7099">
+  <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="text-xl font-bold text-amber-900">Alumni SMU 70 '99 <img src="/logo-nav.png" alt="Zapa" style="height:28px;display:inline-block;vertical-align:middle;margin-left:6px"></a>
+      <a href="/login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    </div>
+  </nav>
+
+  <div id="loading" class="flex items-center justify-center py-20"><p class="text-stone-400">Memuat statistik...</p></div>
+
+  <div id="content" class="hidden">
+    <!-- Hero Counters -->
+    <section style="background:linear-gradient(135deg,#c4ad93,#b39c82,#a38d74)" class="py-12 px-4">
+      <div class="max-w-5xl mx-auto text-center">
+        <h2 class="text-3xl font-bold mb-8" style="color:#3d2b1f">Statistik Angkatan</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div><div class="text-4xl font-bold" style="color:#3d2b1f" id="h-total" class="acnt">0</div><div class="text-stone-600 text-sm">Alumni</div></div>
+          <div><div class="text-4xl font-bold" style="color:#3d2b1f" id="h-cities" class="acnt">0</div><div class="text-stone-600 text-sm">Kota</div></div>
+          <div><div class="text-4xl font-bold" style="color:#3d2b1f" id="h-reg" class="acnt">0</div><div class="text-stone-600 text-sm">Terdaftar</div></div>
+          <div><div class="text-4xl font-bold" style="color:#3d2b1f" id="h-countries" class="acnt">0</div><div class="text-stone-600 text-sm">Negara</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- IPA vs IPS -->
+    <section class="py-12 px-4 bg-stone-50">
+      <div class="max-w-3xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">⚔️ IPA vs IPS</h3>
+        <div class="flex items-center gap-4">
+          <div class="text-right flex-1">
+            <div class="text-3xl font-bold text-blue-700" id="v-ipa">0</div>
+            <div class="text-sm text-stone-500">IPA</div>
+          </div>
+          <div class="flex-[2] h-10 bg-stone-200 rounded-full overflow-hidden flex">
+            <div id="v-ipa-bar" class="bg-blue-600 h-full transition-all duration-1000" style="width:50%"></div>
+            <div id="v-ips-bar" class="bg-red-500 h-full transition-all duration-1000" style="width:50%"></div>
+          </div>
+          <div class="text-left flex-1">
+            <div class="text-3xl font-bold text-red-600" id="v-ips">0</div>
+            <div class="text-sm text-stone-500">IPS</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Kelas Paling Rame -->
+    <section class="py-12 px-4">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">🏆 Kelas Paling Rame</h3>
+        <div id="class-bars"></div>
+      </div>
+    </section>
+
+    <!-- Zodiak -->
+    <section class="py-12 px-4 bg-stone-50">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-2 text-stone-800">♈ Zodiak Angkatan</h3>
+        <p class="text-center text-stone-500 text-sm mb-8" id="zodiac-sub"></p>
+        <div id="zodiac-grid" class="grid grid-cols-3 md:grid-cols-4 gap-4"></div>
+      </div>
+    </section>
+
+    <!-- Birthday Bulan Ini -->
+    <section class="py-12 px-4">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">🎂 Ulang Tahun Bulan Ini</h3>
+        <div id="bday-list" class="flex flex-wrap justify-center gap-3"></div>
+      </div>
+    </section>
+
+    <!-- Bulan Lahir -->
+    <section class="py-12 px-4 bg-stone-50">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">📅 Distribusi Bulan Lahir</h3>
+        <canvas id="month-chart" height="200"></canvas>
+      </div>
+    </section>
+
+    <!-- Dimana Kita Sekarang -->
+    <section class="py-12 px-4">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">🗺️ Dimana Kita Sekarang</h3>
+        <div id="city-bars"></div>
+      </div>
+    </section>
+
+    <!-- Paling Jauh -->
+    <section class="py-12 px-4 bg-stone-50">
+      <div class="max-w-3xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">✈️ Paling Jauh dari Jakarta</h3>
+        <div id="far-list"></div>
+      </div>
+    </section>
+
+    <!-- Karir -->
+    <section class="py-12 px-4">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">💼 Apa Kerja Kita?</h3>
+        <canvas id="job-chart" height="250"></canvas>
+      </div>
+    </section>
+
+    <!-- Industry -->
+    <section class="py-12 px-4 bg-stone-50">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">🏢 Bidang Usaha</h3>
+        <div id="industry-bars"></div>
+      </div>
+    </section>
+
+    <!-- Kampus -->
+    <section class="py-12 px-4">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">🎓 Ke Kampus Mana?</h3>
+        <div id="uni-bars"></div>
+      </div>
+    </section>
+
+    <!-- Hobi -->
+    <section class="py-12 px-4 bg-stone-50">
+      <div class="max-w-4xl mx-auto">
+        <h3 class="text-2xl font-bold text-center mb-8 text-stone-800">🎮 Hobi Kita</h3>
+        <div id="hobby-cloud" class="flex flex-wrap justify-center gap-2 items-center"></div>
+      </div>
+    </section>
+
+    <!-- Progress -->
+    <section class="py-12 px-4">
+      <div class="max-w-md mx-auto text-center">
+        <h3 class="text-2xl font-bold mb-6 text-stone-800">📋 Sudah Berapa yang Daftar?</h3>
+        <div class="relative w-40 h-40 mx-auto mb-4">
+          <svg viewBox="0 0 100 100" class="w-full h-full -rotate-90">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#e7e0d5" stroke-width="8"/>
+            <circle id="prog-ring" cx="50" cy="50" r="42" fill="none" stroke="#d97706" stroke-width="8" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
+          </svg>
+          <div class="absolute inset-0 flex items-center justify-center text-2xl font-bold text-amber-800" id="prog-pct">0%</div>
+        </div>
+        <p class="text-stone-500 text-sm"><span id="prog-reg">0</span> dari <span id="prog-total">0</span> alumni sudah daftar</p>
+        <a href="/login" class="inline-block mt-4 bg-amber-800 text-white px-6 py-2 rounded-full text-sm font-semibold hover:bg-amber-900 transition">Ayo Daftar!</a>
+      </div>
+    </section>
+
+    <footer class="bg-amber-950 text-amber-200 py-6 px-4 text-center text-sm">
+      <a href="/" class="hover:underline">&larr; Kembali ke Beranda</a>
+    </footer>
+  </div>
+
+  <script is:inline src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script is:inline>
+  fetch('/api/stats/detail').then(function(r){return r.json()}).then(function(d){
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+
+    // Hero counters (animate)
+    animateCount('h-total',d.total);
+    animateCount('h-cities',Object.keys(d.cities).length);
+    animateCount('h-reg',d.registered);
+    animateCount('h-countries',Object.keys(d.countries).length);
+
+    // IPA vs IPS
+    var ipaTot=d.ipa,ipsTot=d.ips,tot=ipaTot+ipsTot||1;
+    document.getElementById('v-ipa').textContent=ipaTot;
+    document.getElementById('v-ips').textContent=ipsTot;
+    var ipaB=document.getElementById('v-ipa-bar');ipaB._tw=(ipaTot/tot*100)+'%';ipaB.style.width='0%';
+    var ipsB=document.getElementById('v-ips-bar');ipsB._tw=(ipsTot/tot*100)+'%';ipsB.style.width='0%';
+
+    // Class bars
+    var cls=sorted(d.classes);
+    document.getElementById('class-bars').innerHTML=cls.map(function(c,i){
+      var pct=c[1]/cls[0][1]*100;
+      var medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+      return '<div class="flex items-center gap-3 mb-2"><div class="w-16 text-right text-sm font-medium text-stone-700">'+c[0]+'</div><div class="flex-1 h-8 bg-stone-100 rounded-full overflow-hidden"><div class="h-full rounded-full transition-all duration-700 abar" style="width:0%;background:'+barColor(i,cls.length)+'" data-tw="'+pct+'"></div></div><div class="w-12 text-sm font-bold text-stone-800">'+c[1]+' '+medal+'</div></div>';
+    }).join('');
+
+    // Zodiac
+    var zod=sorted(d.zodiacs);
+    if(zod.length){document.getElementById('zodiac-sub').textContent='Terbanyak: '+zod[0][0]+' ('+zod[0][1]+')';}
+    document.getElementById('zodiac-grid').innerHTML=zod.map(function(z){
+      return '<div class="bg-white rounded-xl p-4 text-center shadow-sm"><div class="text-2xl">'+z[0].split(' ')[0]+'</div><div class="text-xs font-medium text-stone-700 mt-1">'+z[0].split(' ')[1]+'</div><div class="text-lg font-bold text-amber-800 mt-1">'+z[1]+'</div></div>';
+    }).join('');
+
+    // Birthday this month
+    var bdays=d.bdayThisMonth;
+    var monthNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    var curMonthName=monthNames[new Date().getMonth()];
+    if(!bdays.length){document.getElementById('bday-list').innerHTML='<p class="text-stone-400">Tidak ada ulang tahun bulan '+curMonthName+'</p>';}
+    else{document.getElementById('bday-list').innerHTML=bdays.map(function(b){return '<div class="bg-white rounded-xl px-4 py-3 shadow-sm text-center"><div class="text-lg">🎂</div><div class="font-medium text-stone-800 text-sm">'+b.name+'</div><div class="text-xs text-amber-700">'+(b.nickname?'('+b.nickname+') ':'')+'Tgl '+b.day+' '+curMonthName+'</div></div>';}).join('');}
+
+    // Month chart
+    var mOrder=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    var mData=mOrder.map(function(m){return d.months[m]||0;});
+    new Chart(document.getElementById('month-chart'),{type:'bar',data:{labels:mOrder,datasets:[{data:mData,backgroundColor:'#d97706',borderRadius:6}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+
+    // City bars
+    var cit=sorted(d.cities).slice(0,20);
+    document.getElementById('city-bars').innerHTML=cit.map(function(c,i){
+      var pct=c[1]/cit[0][1]*100;
+      return '<div class="flex items-center gap-3 mb-1.5"><div class="w-36 text-right text-xs font-medium text-stone-600 truncate">'+c[0]+'</div><div class="flex-1 h-6 bg-stone-100 rounded-full overflow-hidden"><div class="h-full rounded-full abar transition-all duration-700" style="width:0%;background:'+barColor(i,cit.length)+'" data-tw="'+pct+'"></div></div><div class="w-8 text-xs font-bold text-stone-700">'+c[1]+'</div></div>';
+    }).join('');
+
+    // Farthest
+    document.getElementById('far-list').innerHTML=d.farthest.map(function(f,i){
+      var medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+      var flag=f.country!=='Indonesia'?' 🌏':'';
+      return '<div class="flex items-center gap-3 mb-2 bg-white rounded-xl px-4 py-3 shadow-sm"><div class="text-lg">'+medal+(medal?'':'📍')+'</div><div class="flex-1"><div class="font-medium text-stone-800 text-sm">'+f.name+(f.nickname?' ('+f.nickname+')':'')+'</div><div class="text-xs text-stone-500">'+f.city+', '+f.country+flag+'</div></div><div class="text-sm font-bold text-amber-800">'+f.km.toLocaleString()+' km</div></div>';
+    }).join('');
+
+    // Job chart (donut)
+    var jb=sorted(d.jobs);
+    var jobColors=['#92400e','#b45309','#d97706','#f59e0b','#fbbf24','#fcd34d','#fde68a','#a16207','#854d0e','#78350f'];
+    new Chart(document.getElementById('job-chart'),{type:'doughnut',data:{labels:jb.map(function(j){return j[0]}),datasets:[{data:jb.map(function(j){return j[1]}),backgroundColor:jobColors}]},options:{responsive:true,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+
+    // Industry bars
+    var ind=sorted(d.industries).slice(0,15);
+    if(ind.length){document.getElementById('industry-bars').innerHTML=ind.map(function(c,i){
+      var pct=c[1]/ind[0][1]*100;
+      return '<div class="flex items-center gap-3 mb-1.5"><div class="w-40 text-right text-xs font-medium text-stone-600 truncate">'+c[0]+'</div><div class="flex-1 h-6 bg-stone-100 rounded-full overflow-hidden"><div class="h-full rounded-full abar transition-all duration-700" style="width:0%;background:'+barColor(i,ind.length)+'" data-tw="'+pct+'"></div></div><div class="w-8 text-xs font-bold text-stone-700">'+c[1]+'</div></div>';
+    }).join('');}else{document.getElementById('industry-bars').innerHTML='<p class="text-center text-stone-400">Data belum tersedia</p>';}
+
+    // University bars
+    var uni=sorted(d.unis);
+    if(uni.length){document.getElementById('uni-bars').innerHTML=uni.map(function(c,i){
+      var pct=c[1]/uni[0][1]*100;
+      return '<div class="flex items-center gap-3 mb-2"><div class="w-40 text-right text-xs font-medium text-stone-600 truncate">'+c[0]+'</div><div class="flex-1 h-7 bg-stone-100 rounded-full overflow-hidden"><div class="h-full rounded-full abar transition-all duration-700" style="width:0%;background:'+barColor(i,uni.length)+'" data-tw="'+pct+'"></div></div><div class="w-8 text-xs font-bold text-stone-700">'+c[1]+'</div></div>';
+    }).join('');}else{document.getElementById('uni-bars').innerHTML='<p class="text-center text-stone-400">Data belum tersedia</p>';}
+
+    // Hobby cloud
+    var hob=sorted(d.hobbies);
+    if(hob.length){var maxH=hob[0][1];document.getElementById('hobby-cloud').innerHTML=hob.map(function(h){
+      var sz=Math.max(12,Math.min(36,h[1]/maxH*36));
+      var colors=['#92400e','#b45309','#d97706','#a16207','#854d0e','#78350f','#f59e0b'];
+      return '<span style="font-size:'+sz+'px;color:'+colors[Math.floor(Math.random()*colors.length)]+';font-weight:'+(h[1]>2?'700':'400')+';padding:2px 6px">'+h[0]+'</span>';
+    }).join('');}
+
+    // Progress ring
+    var regPct=Math.round(d.registered/d.total*100);
+    var offset=264-(264*regPct/100);
+    var pr=document.getElementById('prog-ring');pr._offset=offset;
+    document.getElementById('prog-pct').textContent=regPct+'%';
+    document.getElementById('prog-reg').textContent=d.registered;
+    document.getElementById('prog-total').textContent=d.total;
+
+    // Setup scroll-triggered animations AFTER content is rendered
+    setTimeout(function(){
+      var obs=new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          if(!entry.isIntersecting)return;
+          var sec=entry.target;
+          sec.querySelectorAll('.abar').forEach(function(bar,i){
+            setTimeout(function(){var tw=bar.getAttribute('data-tw');if(tw)bar.style.width=tw+'%';},i*80);
+          });
+          sec.querySelectorAll('.acnt').forEach(function(el){triggerCount(el);});
+          var ipaBar=sec.querySelector('#v-ipa-bar');if(ipaBar&&ipaBar._tw){ipaBar.style.width=ipaBar._tw;}
+          var ipsBar=sec.querySelector('#v-ips-bar');if(ipsBar&&ipsBar._tw){ipsBar.style.width=ipsBar._tw;}
+          var ring=sec.querySelector('#prog-ring');if(ring&&ring._offset!==undefined){ring.style.transition='stroke-dashoffset 1.5s ease';ring.style.strokeDashoffset=ring._offset;}
+          obs.unobserve(sec);
+        });
+      },{threshold:0.1});
+      document.querySelectorAll('section').forEach(function(s){obs.observe(s);});
+    },100);
+  });
+
+  function animateCount(id,target){var el=document.getElementById(id);if(!el)return;var n=0;var step=Math.max(1,Math.floor(target/40));var t=setInterval(function(){n+=step;if(n>=target){n=target;clearInterval(t)}el.textContent=n},25);}
+  function triggerCount(el){var target=el._target||0;if(!target||el._done)return;el._done=true;var n=0;var step=Math.max(1,Math.floor(target/30));var t=setInterval(function(){n+=step;if(n>=target){n=target;clearInterval(t)}el.textContent=n},30);}
+  function sorted(obj){return Object.entries(obj).sort(function(a,b){return b[1]-a[1]});}
+  function barColor(i,total){var colors=['#92400e','#a16207','#b45309','#ca8a04','#d97706','#e09f3e','#f59e0b','#fbbf24','#fcd34d','#fde68a','#d4a373','#bc6c25','#dda15e'];return colors[i%colors.length];}
+
+
+  </script>
+</Layout>
