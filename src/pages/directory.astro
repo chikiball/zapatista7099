@@ -1,0 +1,186 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Direktori Alumni - 7099">
+  <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="text-xl font-bold text-amber-900">Alumni SMU 70 '99 <img src="/logo-nav.png" alt="Zapa" style="height:28px;display:inline-block;vertical-align:middle;margin-left:6px"></a>
+      <a href="/profile" id="nav-login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    </div>
+  </nav>
+
+  <!-- Not logged in -->
+  <div id="no-auth" class="hidden min-h-screen flex items-center justify-center px-4">
+    <div class="text-center">
+      <p class="text-stone-500 mb-4">Login untuk melihat direktori alumni</p>
+      <a href="/login" class="bg-amber-800 text-white px-6 py-3 rounded-xl font-semibold hover:bg-amber-900 transition">Masuk / Daftar</a>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="flex items-center justify-center py-20"><p class="text-stone-400">Memuat direktori...</p></div>
+
+  <!-- Content -->
+  <div id="content" class="hidden">
+    <div class="max-w-6xl mx-auto px-4 py-6">
+      <!-- Header -->
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div>
+          <h2 class="text-2xl font-bold text-stone-800">Direktori Alumni</h2>
+          <p class="text-stone-500 text-sm" id="count-label">210 alumni</p>
+        </div>
+        <!-- Search -->
+        <div class="w-full md:w-80">
+          <input type="text" id="search" placeholder="Cari nama atau panggilan..." class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-2 mb-6">
+        <select id="filter-class" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">Semua Kelas</option>
+        </select>
+        <select id="filter-city" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">Semua Kota</option>
+        </select>
+        <select id="sort-by" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="name">Nama A-Z</option>
+          <option value="city">Kota</option>
+          <option value="class">Kelas</option>
+        </select>
+        <button type="button" id="reset-btn" class="text-sm text-amber-700 hover:underline px-2 hidden">Reset</button>
+      </div>
+
+      <!-- Card Grid -->
+      <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+
+      <!-- No results -->
+      <div id="no-results" class="hidden text-center py-12 text-stone-400">Tidak ada alumni yang cocok</div>
+    </div>
+  </div>
+
+  <script is:inline>
+  (function(){
+    var allData=[],filtered=[];
+
+    // Check auth
+    fetch('/api/auth/me',{credentials:'include'}).then(function(r){
+      if(!r.ok){
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('no-auth').classList.remove('hidden');
+        return;
+      }
+      r.json().then(function(u){
+        document.getElementById('nav-login').textContent=u.user.name||u.user.email;
+        document.getElementById('nav-login').href='/profile';
+        loadDirectory();
+      });
+    }).catch(function(){
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('no-auth').classList.remove('hidden');
+    });
+
+    function loadDirectory(){
+      fetch('/api/directory',{credentials:'include'}).then(function(r){return r.json()}).then(function(data){
+        allData=data;
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('content').classList.remove('hidden');
+        buildFilters();
+        applyFilters();
+      });
+    }
+
+    function buildFilters(){
+      var classes={},cities={};
+      allData.forEach(function(a){
+        if(a.class)classes[a.class]=1;
+        if(a.city)cities[a.city]=1;
+      });
+      var cs=document.getElementById('filter-class');
+      Object.keys(classes).sort().forEach(function(c){
+        var o=document.createElement('option');o.value=c;o.textContent=c;cs.appendChild(o);
+      });
+      var ct=document.getElementById('filter-city');
+      Object.keys(cities).sort().forEach(function(c){
+        var o=document.createElement('option');o.value=c;o.textContent=c;ct.appendChild(o);
+      });
+    }
+
+    function applyFilters(){
+      var q=(document.getElementById('search').value||'').toLowerCase().trim();
+      var fc=document.getElementById('filter-class').value;
+      var fct=document.getElementById('filter-city').value;
+      var sort=document.getElementById('sort-by').value;
+
+      filtered=allData.filter(function(a){
+        if(q&&a.name.toLowerCase().indexOf(q)<0&&(!a.nickname||a.nickname.toLowerCase().indexOf(q)<0))return false;
+        if(fc&&a.class!==fc)return false;
+        if(fct&&a.city!==fct)return false;
+        return true;
+      });
+
+      filtered.sort(function(a,b){
+        if(sort==='city')return(a.city||'').localeCompare(b.city||'');
+        if(sort==='class')return(a.class||'').localeCompare(b.class||'');
+        return(a.name||'').localeCompare(b.name||'');
+      });
+
+      document.getElementById('count-label').textContent='Menampilkan '+filtered.length+' dari '+allData.length+' alumni';
+      document.getElementById('reset-btn').classList.toggle('hidden',!q&&!fc&&!fct);
+      renderCards();
+    }
+
+    function renderCards(){
+      var grid=document.getElementById('grid');
+      var noRes=document.getElementById('no-results');
+      if(!filtered.length){grid.innerHTML='';noRes.classList.remove('hidden');return;}
+      noRes.classList.add('hidden');
+
+      grid.innerHTML=filtered.map(function(a){
+        var initials=(a.name||'?').split(' ').map(function(w){return w[0]}).join('').substring(0,2).toUpperCase();
+        var colors=['#92400e','#b45309','#d97706','#a16207','#854d0e','#78350f','#ca8a04','#c2410c'];
+        var bgColor=colors[initials.charCodeAt(0)%colors.length];
+
+        var avatar=a.photo
+          ?'<img src="/photos/'+a.photo+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">'
+          :'<div style="width:56px;height:56px;border-radius:50%;background:'+bgColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px">'+initials+'</div>';
+
+        var details='';
+        if(a.city)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>📍</span>'+a.city+'</div>';
+        if(a.job_title)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>💼</span>'+a.job_title+'</div>';
+        if(a.class)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>🎓</span>'+a.class+'</div>';
+
+        var extra='';
+        if(a.university)extra+='<div class="text-xs text-stone-400">🏫 '+a.university+'</div>';
+        if(a.hobby)extra+='<div class="text-xs text-stone-400">🎮 '+a.hobby+'</div>';
+        if(a.company)extra+='<div class="text-xs text-stone-400">🏢 '+a.company+'</div>';
+
+        return '<div class="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition">'
+          +'<div class="flex items-start gap-3">'
+          +avatar
+          +'<div class="flex-1 min-w-0">'
+          +'<div class="font-semibold text-stone-800 text-sm truncate">'+a.name+'</div>'
+          +(a.nickname?'<div class="text-xs text-amber-700">('+a.nickname+')</div>':'')
+          +'<div class="mt-1 space-y-0.5">'+details+'</div>'
+          +'</div>'
+          +'</div>'
+          +(extra?'<div class="mt-3 pt-3 border-t border-stone-100 space-y-1">'+extra+'</div>':'')
+          +'</div>';
+      }).join('');
+    }
+
+    document.getElementById('search').addEventListener('input',applyFilters);
+    document.getElementById('filter-class').addEventListener('change',applyFilters);
+    document.getElementById('filter-city').addEventListener('change',applyFilters);
+    document.getElementById('sort-by').addEventListener('change',applyFilters);
+    document.getElementById('reset-btn').addEventListener('click',function(){
+      document.getElementById('search').value='';
+      document.getElementById('filter-class').value='';
+      document.getElementById('filter-city').value='';
+      document.getElementById('sort-by').value='name';
+      applyFilters();
+    });
+  })();
+  </script>
+</Layout>

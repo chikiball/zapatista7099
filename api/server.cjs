@@ -339,6 +339,17 @@ app.delete("/api/profile/photos/:id", authMiddleware, (req, res) => {
   res.json({ success: true });
 });
 
+
+// Directory (login required)
+app.get("/api/directory", authMiddleware, (req, res) => {
+  const alumni = db.prepare("SELECT id, name, nickname, city, country, job_title, company, class, hobby, university, bio FROM alumni WHERE is_public = 1 ORDER BY name").all();
+  const photos = db.prepare("SELECT alumni_id, filename FROM photos ORDER BY created_at DESC").all();
+  const photoMap = {};
+  photos.forEach(p => { if(!photoMap[p.alumni_id]) photoMap[p.alumni_id] = p.filename; });
+  alumni.forEach(a => { a.photo = photoMap[a.id] || null; });
+  res.json(alumni);
+});
+
 // ── PUBLIC ROUTES ───────────────────────────────────
 
 app.get("/api/health", (req, res) => {

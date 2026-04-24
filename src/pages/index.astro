@@ -14,7 +14,7 @@ import Layout from "../layouts/Layout.astro";
       </button>
       <ul class="hidden md:flex space-x-6 text-sm font-medium text-gray-600">
         <li><a href="/" class="hover:text-amber-800">Home</a></li>
-        <li><a href="/login" class="hover:text-amber-800">Directory</a></li>
+        <li><a href="/directory" class="hover:text-amber-800">Directory</a></li>
         <li><a href="/map" class="hover:text-amber-800">Map</a></li>
         <li><a href="/login" class="hover:text-amber-800">Articles</a></li>
         <li><a href="/login" class="hover:text-amber-800">Events</a></li>
@@ -24,7 +24,7 @@ import Layout from "../layouts/Layout.astro";
     <!-- Mobile menu -->
     <div id="mobile-menu" class="hidden md:hidden bg-white border-t border-stone-100 px-4 py-2">
       <a href="/" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Home</a>
-      <a href="/login" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Directory</a>
+      <a href="/directory" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Directory</a>
       <a href="/map" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Map</a>
       <a href="/stats" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Statistics</a>
       <a href="/login" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Events</a>
@@ -50,10 +50,10 @@ import Layout from "../layouts/Layout.astro";
     <div class="max-w-6xl mx-auto">
       <h3 class="text-2xl font-bold text-center mb-12">Sekilas Tentang Kita</h3>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <div class="bg-white p-6 rounded-xl shadow-sm text-center">
+        <a href="/directory" class="bg-white p-6 rounded-xl shadow-sm text-center block hover:shadow-md transition">
           <div class="text-3xl font-bold text-amber-800" id="stat-alumni">--</div>
           <div class="text-sm text-gray-500 mt-1">Total Alumni</div>
-        </div>
+        </a>
         <a href="/map" class="bg-white p-6 rounded-xl shadow-sm text-center block hover:shadow-md transition">
           <div class="text-3xl font-bold text-amber-700" id="stat-cities">--</div>
           <div class="text-sm text-gray-500 mt-1">Kota</div>
