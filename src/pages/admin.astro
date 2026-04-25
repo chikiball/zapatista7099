@@ -1,0 +1,244 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Admin - 7099">
+  <div id="denied" class="hidden min-h-screen flex items-center justify-center"><p class="text-stone-500">Access denied</p></div>
+  <div id="loading" class="flex items-center justify-center py-20"><p class="text-stone-400">Loading...</p></div>
+
+  <div id="app" class="hidden min-h-screen bg-stone-50">
+    <nav class="bg-amber-900 text-white px-4 py-3 flex items-center justify-between">
+      <div class="font-bold">⚙️ Admin Panel</div>
+      <div class="flex gap-4 text-sm">
+        <a href="/" class="opacity-75 hover:opacity-100">Site</a>
+        <button type="button" onclick="logout()" class="opacity-75 hover:opacity-100">Logout</button>
+      </div>
+    </nav>
+
+    <!-- Tabs -->
+    <div class="bg-white border-b flex overflow-x-auto text-sm">
+      <button type="button" class="tab px-4 py-3 font-medium border-b-2 border-amber-700 text-amber-900" data-tab="dash" onclick="showTab('dash')">Dashboard</button>
+      <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="pending" onclick="showTab('pending')">⏳ Pending <span id="pending-badge" class="bg-red-500 text-white text-xs rounded-full px-1.5 ml-1 hidden">0</span></button>
+      <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="alumni" onclick="showTab('alumni')">Alumni</button>
+      <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="users" onclick="showTab('users')">Users</button>
+      <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="settings" onclick="showTab('settings')">⚙️ Settings</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="tab-dash" class="p-4 max-w-5xl mx-auto">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" id="dash-stats"></div>
+      <a href="/api/admin/export" class="inline-block bg-amber-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-900">📥 Export CSV</a>
+    </div>
+
+    <!-- Pending -->
+    <div id="tab-pending" class="hidden p-4 max-w-3xl mx-auto">
+      <h3 class="text-lg font-bold mb-4">Menunggu Persetujuan</h3>
+      <div id="pending-list"></div>
+      <p id="pending-empty" class="hidden text-stone-400 text-center py-8">Tidak ada yang menunggu</p>
+    </div>
+
+    <!-- Alumni -->
+    <div id="tab-alumni" class="hidden p-4 max-w-6xl mx-auto">
+      <div class="flex gap-3 mb-4">
+        <input type="text" id="al-search" placeholder="Cari alumni..." class="flex-1 border rounded-lg px-3 py-2 text-sm" oninput="filterAlumni()">
+      </div>
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="bg-stone-100 text-left"><th class="p-2">Nama</th><th class="p-2">Panggilan</th><th class="p-2">Kota</th><th class="p-2">Kelas</th><th class="p-2">Pekerjaan</th><th class="p-2 w-20"></th></tr></thead>
+        <tbody id="al-body"></tbody>
+      </table></div>
+    </div>
+
+    <!-- Users -->
+    <div id="tab-users" class="hidden p-4 max-w-5xl mx-auto">
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="bg-stone-100 text-left"><th class="p-2">Email</th><th class="p-2">Nama</th><th class="p-2">Status</th><th class="p-2">Role</th><th class="p-2">Terdaftar</th><th class="p-2 w-20"></th></tr></thead>
+        <tbody id="usr-body"></tbody>
+      </table></div>
+    </div>
+
+    <!-- Settings -->
+    <div id="tab-settings" class="hidden p-4 max-w-xl mx-auto">
+      <h3 class="text-lg font-bold mb-4">Telegram Bot</h3>
+      <div class="bg-white rounded-xl p-4 shadow-sm space-y-3">
+        <div>
+          <label class="block text-xs text-stone-500 mb-1">Bot Token</label>
+          <input type="text" id="cfg-token" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
+        </div>
+        <div>
+          <label class="block text-xs text-stone-500 mb-1">Chat ID</label>
+          <input type="text" id="cfg-chatid" class="w-full border rounded-lg px-3 py-2 text-sm font-mono">
+        </div>
+        <div class="flex gap-2">
+          <button type="button" onclick="saveConfig()" class="bg-amber-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-900">Simpan</button>
+          <button type="button" onclick="testTelegram()" class="border border-amber-700 text-amber-800 px-4 py-2 rounded-lg text-sm hover:bg-amber-50">🔔 Test Kirim</button>
+        </div>
+        <div id="cfg-msg" class="text-sm hidden"></div>
+      </div>
+      <h3 class="text-lg font-bold mb-4 mt-6">SMTP Email</h3>
+      <div class="bg-white rounded-xl p-4 shadow-sm space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-xs text-stone-500 mb-1">Host</label><input type="text" id="cfg-smtp-host" class="w-full border rounded-lg px-3 py-2 text-sm font-mono"></div>
+          <div><label class="block text-xs text-stone-500 mb-1">Port</label><input type="text" id="cfg-smtp-port" class="w-full border rounded-lg px-3 py-2 text-sm font-mono"></div>
+        </div>
+        <div><label class="block text-xs text-stone-500 mb-1">User</label><input type="text" id="cfg-smtp-user" class="w-full border rounded-lg px-3 py-2 text-sm font-mono"></div>
+        <div><label class="block text-xs text-stone-500 mb-1">Password</label><input type="password" id="cfg-smtp-pass" class="w-full border rounded-lg px-3 py-2 text-sm font-mono"></div>
+        <div><label class="block text-xs text-stone-500 mb-1">From</label><input type="text" id="cfg-smtp-from" class="w-full border rounded-lg px-3 py-2 text-sm font-mono"></div>
+        <div class="flex gap-2">
+          <button type="button" onclick="saveSmtp()" class="bg-amber-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-amber-900">Simpan SMTP</button>
+          <button type="button" onclick="testEmail()" class="border border-amber-700 text-amber-800 px-4 py-2 rounded-lg text-sm hover:bg-amber-50">📧 Test Email</button>
+        </div>
+        <div id="smtp-msg" class="text-sm hidden"></div>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+        <h3 class="font-bold text-lg mb-4" id="modal-title">Edit</h3>
+        <form id="edit-form" onsubmit="saveEdit(event)">
+          <div class="grid grid-cols-2 gap-3 text-sm" id="edit-fields"></div>
+          <div class="flex gap-2 mt-4">
+            <button type="submit" class="bg-amber-800 text-white px-4 py-2 rounded-lg text-sm">Simpan</button>
+            <button type="button" onclick="closeModal()" class="border px-4 py-2 rounded-lg text-sm">Batal</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script is:inline>
+  var alumniData=[],usersData=[];
+
+  fetch('/api/auth/me',{credentials:'include'}).then(function(r){
+    if(!r.ok){document.getElementById('loading').classList.add('hidden');document.getElementById('denied').classList.remove('hidden');return}
+    r.json().then(function(d){
+      if(d.user.role!=='admin'){document.getElementById('loading').classList.add('hidden');document.getElementById('denied').classList.remove('hidden');return}
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      loadDashboard();loadPending();
+    });
+  });
+
+  function showTab(t){
+    document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('border-b-2','border-amber-700','text-amber-900');b.classList.add('text-stone-500')});
+    document.querySelector('[data-tab="'+t+'"]').classList.add('border-b-2','border-amber-700','text-amber-900');
+    document.querySelector('[data-tab="'+t+'"]').classList.remove('text-stone-500');
+    ['dash','pending','alumni','users','settings'].forEach(function(x){document.getElementById('tab-'+x).classList.toggle('hidden',x!==t)});
+    if(t==='alumni'&&!alumniData.length)loadAlumni();
+    if(t==='users'&&!usersData.length)loadUsers();
+    if(t==='settings')loadConfig();
+  }
+
+  function loadDashboard(){
+    fetch('/api/admin/dashboard',{credentials:'include'}).then(function(r){return r.json()}).then(function(d){
+      var items=[
+        {n:'Total Alumni',v:d.total_alumni,c:'#92400e'},
+        {n:'Users',v:d.total_users,c:'#b45309'},
+        {n:'Pending',v:d.pending_users,c:d.pending_users>0?'#dc2626':'#059669'},
+        {n:'Kota',v:d.total_cities,c:'#d97706'}
+      ];
+      document.getElementById('dash-stats').innerHTML=items.map(function(i){
+        return '<div class="bg-white rounded-xl p-4 shadow-sm text-center"><div class="text-2xl font-bold" style="color:'+i.c+'">'+i.v+'</div><div class="text-xs text-stone-500 mt-1">'+i.n+'</div></div>';
+      }).join('');
+      if(d.pending_users>0){var b=document.getElementById('pending-badge');b.textContent=d.pending_users;b.classList.remove('hidden')}
+    });
+  }
+
+  function loadPending(){
+    fetch('/api/admin/pending',{credentials:'include'}).then(function(r){return r.json()}).then(function(list){
+      if(!list.length){document.getElementById('pending-empty').classList.remove('hidden');document.getElementById('pending-list').innerHTML='';return}
+      document.getElementById('pending-empty').classList.add('hidden');
+      document.getElementById('pending-list').innerHTML=list.map(function(u){
+        var match=u.alumni_name?'<div class="text-xs text-green-700 mt-1">Matched: '+u.alumni_name+(u.alumni_nick?' ('+u.alumni_nick+')':'')+' - '+u.alumni_city+'</div>':'<div class="text-xs text-stone-400 mt-1">No alumni match</div>';
+        var method=u.google_id?'Google':'Email';
+        var ago=timeAgo(u.created_at);
+        return '<div class="bg-white rounded-xl p-4 shadow-sm mb-3"><div class="flex items-start justify-between"><div><div class="font-medium text-stone-800">'+(u.name||u.email)+'</div><div class="text-xs text-stone-500">'+u.email+' | '+method+' | '+ago+'</div>'+match+'</div><div class="flex gap-2"><button type="button" onclick="approveUser('+u.id+')" class="bg-green-600 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-700">✅ Approve</button><button type="button" onclick="rejectUser('+u.id+')" class="bg-red-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-red-600">❌ Reject</button></div></div></div>';
+      }).join('');
+    });
+  }
+
+  function approveUser(id){fetch('/api/admin/approve/'+id,{method:'POST',credentials:'include'}).then(function(){loadPending();loadDashboard()})}
+  function rejectUser(id){if(!confirm('Reject user?'))return;fetch('/api/admin/reject/'+id,{method:'POST',credentials:'include'}).then(function(){loadPending();loadDashboard()})}
+
+  function loadAlumni(){
+    fetch('/api/admin/alumni',{credentials:'include'}).then(function(r){return r.json()}).then(function(d){alumniData=d;renderAlumni()});
+  }
+  function filterAlumni(){renderAlumni()}
+  function renderAlumni(){
+    var q=(document.getElementById('al-search').value||'').toLowerCase();
+    var f=alumniData.filter(function(a){return !q||a.name.toLowerCase().indexOf(q)>=0||(a.nickname||'').toLowerCase().indexOf(q)>=0});
+    document.getElementById('al-body').innerHTML=f.slice(0,100).map(function(a){
+      return '<tr class="border-b hover:bg-stone-50"><td class="p-2">'+a.name+'</td><td class="p-2 text-stone-500">'+(a.nickname||'')+'</td><td class="p-2 text-stone-500">'+(a.city||'')+'</td><td class="p-2 text-stone-500">'+(a.class||'')+'</td><td class="p-2 text-stone-500">'+(a.job_title||'')+'</td><td class="p-2"><button type="button" onclick=\'editAlumni('+a.id+')\' class="text-amber-700 text-xs hover:underline">Edit</button> <button type="button" onclick=\'delAlumni('+a.id+')\' class="text-red-500 text-xs hover:underline ml-1">Del</button></td></tr>';
+    }).join('')+(f.length>100?'<tr><td colspan="6" class="p-2 text-center text-stone-400 text-xs">Showing 100 of '+f.length+'</td></tr>':'');
+  }
+
+  var editId=null;
+  function editAlumni(id){
+    var a=alumniData.find(function(x){return x.id===id});if(!a)return;
+    editId=id;
+    document.getElementById('modal-title').textContent='Edit: '+a.name;
+    var fields=['name','nickname','email','phone','city','country','job_title','company','class','university','hobby','birthday','gender','address','latitude','longitude'];
+    document.getElementById('edit-fields').innerHTML=fields.map(function(f){
+      return '<div><label class="block text-xs text-stone-500 mb-1">'+f+'</label><input name="'+f+'" value="'+(a[f]||'')+'" class="w-full border rounded px-2 py-1 text-sm"></div>';
+    }).join('');
+    document.getElementById('modal').classList.remove('hidden');
+  }
+  function closeModal(){document.getElementById('modal').classList.add('hidden')}
+  function saveEdit(e){
+    e.preventDefault();var f=e.target;var body={};
+    ['name','nickname','email','phone','city','country','job_title','company','class','university','hobby','birthday','gender','address','latitude','longitude'].forEach(function(k){body[k]=f[k].value});
+    fetch('/api/admin/alumni/'+editId,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)}).then(function(){closeModal();loadAlumni()});
+  }
+  function delAlumni(id){if(!confirm('Delete this alumni?'))return;fetch('/api/admin/alumni/'+id,{method:'DELETE',credentials:'include'}).then(function(){loadAlumni()})}
+
+  function loadUsers(){
+    fetch('/api/admin/users',{credentials:'include'}).then(function(r){return r.json()}).then(function(d){usersData=d;renderUsers()});
+  }
+  function renderUsers(){
+    document.getElementById('usr-body').innerHTML=usersData.map(function(u){
+      var sc=u.status==='approved'?'text-green-700':u.status==='rejected'?'text-red-600':'text-amber-600';
+      var rc=u.role==='admin'?'text-purple-700':'text-stone-500';
+      return '<tr class="border-b hover:bg-stone-50"><td class="p-2 text-xs">'+u.email+'</td><td class="p-2">'+(u.name||'-')+'</td><td class="p-2"><select onchange="changeUserStatus('+u.id+',this.value)" class="text-xs border rounded px-1 py-0.5 '+sc+'"><option value="pending"'+(u.status==='pending'?' selected':'')+'>Pending</option><option value="approved"'+(u.status==='approved'?' selected':'')+'>Approved</option><option value="rejected"'+(u.status==='rejected'?' selected':'')+'>Rejected</option></select></td><td class="p-2"><select onchange="changeUserRole('+u.id+',this.value)" class="text-xs border rounded px-1 py-0.5 '+rc+'"><option value="user"'+(u.role==='user'?' selected':'')+'>User</option><option value="admin"'+(u.role==='admin'?' selected':'')+'>Admin</option></select></td><td class="p-2 text-xs text-stone-400">'+timeAgo(u.created_at)+'</td><td class="p-2"><button type="button" onclick="delUser('+u.id+')" class="text-red-500 text-xs hover:underline">Del</button></td></tr>';
+    }).join('');
+  }
+  function changeUserStatus(id,s){fetch('/api/admin/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({status:s})}).then(function(){loadUsers();loadDashboard()})}
+  function changeUserRole(id,r){fetch('/api/admin/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({role:r})}).then(function(){loadUsers()})}
+  function delUser(id){if(!confirm('Delete this user?'))return;fetch('/api/admin/users/'+id,{method:'DELETE',credentials:'include'}).then(function(){loadUsers()})}
+
+  function loadConfig(){
+    fetch('/api/admin/config',{credentials:'include'}).then(function(r){return r.json()}).then(function(c){
+      document.getElementById('cfg-token').value=c.telegram_bot_token||'';
+      document.getElementById('cfg-chatid').value=c.telegram_chat_id||'';
+      document.getElementById('cfg-smtp-host').value=c.smtp_host||'';
+      document.getElementById('cfg-smtp-port').value=c.smtp_port||'';
+      document.getElementById('cfg-smtp-user').value=c.smtp_user||'';
+      document.getElementById('cfg-smtp-pass').value=c.smtp_pass||'';
+      document.getElementById('cfg-smtp-from').value=c.smtp_from||'';
+    });
+  }
+  function saveConfig(){
+    var body={telegram_bot_token:document.getElementById('cfg-token').value,telegram_chat_id:document.getElementById('cfg-chatid').value};
+    fetch('/api/admin/config',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)}).then(function(){
+      var m=document.getElementById('cfg-msg');m.textContent='✅ Tersimpan';m.className='text-sm text-green-700';setTimeout(function(){m.className='text-sm hidden'},2000);
+    });
+  }
+  function saveSmtp(){
+    var body={smtp_host:document.getElementById('cfg-smtp-host').value,smtp_port:document.getElementById('cfg-smtp-port').value,smtp_user:document.getElementById('cfg-smtp-user').value,smtp_pass:document.getElementById('cfg-smtp-pass').value,smtp_from:document.getElementById('cfg-smtp-from').value};
+    fetch('/api/admin/config',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)}).then(function(){
+      var m=document.getElementById('smtp-msg');m.textContent='\u2705 Tersimpan';m.className='text-sm text-green-700';setTimeout(function(){m.className='text-sm hidden'},2000);
+    });
+  }
+  function testEmail(){
+    fetch('/api/admin/email-test',{method:'POST',credentials:'include'}).then(function(){
+      var m=document.getElementById('smtp-msg');m.textContent='\ud83d\udce8 Test email sent to your address!';m.className='text-sm text-amber-700';setTimeout(function(){m.className='text-sm hidden'},3000);
+    });
+  }
+  function testTelegram(){
+    fetch('/api/admin/telegram-test',{method:'POST',credentials:'include'}).then(function(){
+      var m=document.getElementById('cfg-msg');m.textContent='📨 Test message sent!';m.className='text-sm text-amber-700';setTimeout(function(){m.className='text-sm hidden'},3000);
+    });
+  }
+  function timeAgo(d){if(!d)return'';var s=Math.floor((Date.now()-new Date(d+'Z').getTime())/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
+  function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(function(){window.location.href='/login'})}
+  </script>
+</Layout>

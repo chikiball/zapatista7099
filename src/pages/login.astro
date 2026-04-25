@@ -40,10 +40,13 @@ import Layout from "../layouts/Layout.astro";
           </div>
           <button type="submit" class="w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition" id="submit-btn">Masuk</button>
         </form>
+        <div class="text-center mt-3">
+          <button type="button" onclick="showForgot()" class="text-xs text-stone-400 hover:text-amber-700">Lupa password?</button>
+        </div>
 
         <p class="text-center text-sm text-stone-500 mt-6">
           <span id="toggle-text">Belum punya akun?</span>
-          <button onclick="toggleMode()" class="text-amber-700 font-semibold hover:underline" id="toggle-btn">Daftar</button>
+          <button onclick="toggleMode()" id="forgot-link" class="text-amber-700 font-semibold hover:underline" id="toggle-btn">Daftar</button>
         </p>
       </div>
     </div>
@@ -154,6 +157,17 @@ import Layout from "../layouts/Layout.astro";
       } catch(err) {
         showError("Google login gagal. Coba lagi.");
       }
+    }
+
+    
+    function showForgot(){
+      var email=document.getElementById('email').value;
+      if(!email){showError('Masukkan email dulu');return}
+      hideMessages();
+      fetch('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email})})
+        .then(function(r){return r.json()}).then(function(){
+          showSuccess('Link reset password telah dikirim ke email kamu (jika terdaftar)');
+        }).catch(function(){showError('Gagal mengirim email')});
     }
 
     // Check if already logged in

@@ -1,153 +1,123 @@
 # 7099 Project Context — For AI Assistants
 
-> Load this file at the start of a new conversation to resume work on this project.
-> Last updated: 2026-04-20
+> Load this file at the start of a new conversation to resume work.
+> Last updated: 2026-04-25
 
 ## What Is This
 
-**7099** is an alumni website for **SMAN 70 Jakarta, Class of 1999** (Angkatan 99).
+**7099** is an alumni website for **SMAN 70 Jakarta, Class of 1999**.
 - **Live URL:** https://zapa.inweb.id
-- **Domain:** zapa.inweb.id → 103.16.198.61
-
-## Server Access
-
-```
-SSH: ssh -p 52017 zapa@103.16.198.61
-Key auth: ed25519 key (user has it)
-Sudo: NOPASSWD configured for user zapa
-```
+- **Server:** ssh -p 52017 zapa@103.16.198.61 (ed25519 key auth)
 
 ## Architecture
 
 ```
 Browser → https://zapa.inweb.id
-  → Proxmox/OpenResty (SSL termination, port 443→80)
-    → Nginx on Debian 12 container (port 80)
+  → Proxmox/OpenResty (SSL, port 443→80)
+    → Nginx on Debian 12 (port 80)
       ├── Static: /var/www/alumni/dist/ (Astro build)
       └── /api/* → proxy_pass localhost:3000
             → Node.js Express API (PM2: alumni-api)
               → SQLite: /var/www/alumni/api/alumni.db
 ```
 
-## Key Paths on Server
-
-- **Project root:** `/var/www/alumni/`
-- **Source:** `/var/www/alumni/src/`
-- **API:** `/var/www/alumni/api/server.cjs`
-- **Database:** `/var/www/alumni/api/alumni.db`
-- **Built site:** `/var/www/alumni/dist/`
-- **Nginx:** `/etc/nginx/sites-available/alumni`
-
 ## Tech Stack
 
-- **Astro v6** (static site generator) + **Tailwind CSS v4**
-- **Express.js** API server (CommonJS `.cjs` because Astro sets `"type":"module"`)
+- **Astro v6** + **Tailwind CSS v4** (static site)
+- **Express.js** API (`api/server.cjs` — CommonJS because Astro sets type:module)
 - **SQLite** via `better-sqlite3`
-- **D3.js v7** + **TopoJSON v3** for globe map (Canvas rendering)
-- **JWT** auth with HttpOnly cookies + **Google Sign-In** (client ID: `1035245406806-7dh06iqc9697ssos8tukbho0no2eaut5.apps.googleusercontent.com`)
-- **PM2** process manager (auto-start on reboot)
-- **Node.js v22** (via NodeSource)
+- **D3.js v7** + **TopoJSON** + **Canvas** for globe map
+- **Chart.js** for statistics
+- **JWT** auth (HttpOnly cookies) + **Google Sign-In**
+- **nodemailer** for SMTP emails
+- **multer** for photo uploads
+- **PM2** process manager, **Node.js v22**
 
 ## Database Schema
 
 ```sql
-CREATE TABLE alumni (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL, nickname TEXT, email TEXT, phone TEXT,
-  city TEXT, country TEXT, latitude REAL, longitude REAL,
-  university TEXT, degree TEXT, job_title TEXT, company TEXT, industry TEXT,
-  bio TEXT, photo_url TEXT, is_public INTEGER DEFAULT 1,
-  created_at TEXT, google_id TEXT,
-  birthday TEXT, gender TEXT, address TEXT, hobby TEXT
-);
+-- 210 alumni records
+CREATE TABLE alumni (id, name, nickname, email, phone, city, country,
+  latitude, longitude, university, degree, job_title, company, industry,
+  bio, photo_url, is_public, created_at, google_id,
+  birthday, gender, address, hobby, class);
 
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT UNIQUE NOT NULL, password_hash TEXT, google_id TEXT,
-  name TEXT, alumni_id INTEGER REFERENCES alumni(id),
-  role TEXT DEFAULT 'user', created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
+-- Users with approval system
+CREATE TABLE users (id, email, password_hash, google_id, name,
+  alumni_id REFERENCES alumni(id), role DEFAULT 'user',
+  status DEFAULT 'pending', -- pending|approved|rejected
+  reset_token, reset_expires, created_at);
 
+CREATE TABLE photos (id, alumni_id, filename, original_name, created_at);
 CREATE TABLE articles (id, author_id, title, content, published_at, status DEFAULT 'draft');
-CREATE TABLE events (id, title, description, event_date, location, rsvp_count DEFAULT 0);
+CREATE TABLE events (id, title, description, event_date, location, rsvp_count);
+CREATE TABLE config (key PRIMARY KEY, value); -- telegram + smtp settings
 ```
 
-## Pages & Features
+## Pages (8 total)
 
-### `src/pages/index.astro` — Homepage
-- Brown/amber theme, hero with "7099" title
-- Dynamic stats from `/api/stats` (total alumni, cities, industries, countries)
-- Mobile hamburger menu with JS toggle
-- Cards link to `/map` and `/login`
+| Page | URL | Auth | Description |
+|------|-----|------|-------------|
+| Homepage | `/` | Public | Hero with Zapa logo, dynamic stats, feature cards, mobile menu |
+| Login | `/login` | Public | Google + email signup/login, forgot password link |
+| Reset | `/reset` | Public | Password reset form (token from email) |
+| Profile | `/profile` | Approved | Edit all fields, photo upload, class dropdown |
+| Map | `/map` | Public (details: approved) | D3 canvas globe, neon pins, starburst cards, dynamic clustering |
+| Stats | `/stats` | Public | 12 chart sections, scroll animations, Chart.js |
+| Directory | `/directory` | Approved | Searchable card grid, filter by class/city |
+| Admin | `/admin` | Admin only | Dashboard, approval queue, alumni/user management, settings |
 
-### `src/pages/login.astro` — Auth
-- Google Sign-In via `google.accounts.id.renderButton()` (client ID hardcoded)
-- Email/password signup & login (toggle mode on same page)
-- On signup: auto-matches alumni by email → name → nickname
-- JWT stored in HttpOnly cookie, 7-day expiry
-- Redirects to `/profile` on success
+## Auth System
 
-### `src/pages/profile.astro` — Profile Edit
-- Checks auth via `/api/auth/me`
-- If alumni matched: shows green banner + pre-filled form
-- If no match: shows search box to find & link alumni record
-- Fields: name, nickname, birthday (date), gender (select), phone, city, country, job_title, address, company, university (comma-sep), hobby (comma-sep)
-- Save creates/updates alumni record
+- **3 middlewares:** `authMiddleware` (JWT valid), `approvedMiddleware` (status=approved), `adminMiddleware` (role=admin)
+- **Signup flow:** New user → status='pending' → admin approves → status='approved'
+- **Protected by approvedMiddleware:** directory, profile edit, photo upload, alumni search, profile link
+- **Admin account:** bengek70@gmail.com (role=admin, status=approved)
 
-### `src/pages/map.astro` — Interactive Globe
-- **D3.js orthographic globe** rendered on Canvas (not SVG — performance)
-- Neon green pins (`#39ff14`) with glow effect
-- Clusters: nearby alumni grouped, show count badge
-- **Desktop** (`@media hover:hover`): hover over pin shows starburst cards
-- **Mobile** (`!isHover`): tap pin toggles cards, tap elsewhere dismisses
-- Starburst: cards radiate at equal angles, random distance, with slow drift (3s interval, 2.8s CSS transition, ±30px)
-- Single-person pins show card next to pin
-- City labels (Jabodetabek kotamadya) appear at zoom >8x
-- Login-gated: non-logged-in users see pins but no details + "Login untuk melihat" banner
-- Zoom: scroll/pinch (0.3x–80x), drag: rotate globe, double-click/tap: reset
-- Uses `countries-50m.json` from CDN for detailed coastlines
+## Notifications
 
-### `api/server.cjs` — Express API
-- Auth: signup, login, Google Sign-In, JWT middleware
-- Alumni matching: email (exact) → name (exact) → nickname (partial)
-- Profile: GET/PUT with create-or-update logic
-- Stats: counts with DISTINCT for cities/industries/countries
-- Map: returns lat/lng + name/nickname/city/country/job_title
-- CORS enabled, cookie-parser for JWT
+- **Telegram:** Bot sends to group on new registration. Config in DB (token + chat_id).
+- **Email (SMTP):** Welcome on signup, approval/rejection from admin, password reset. SMTP: dr6101.inweb.id:587, zapa@inweb.id
+- Both configurable in admin Settings tab
+
+## Map Features
+
+- D3 orthographic globe on Canvas (not SVG)
+- Neon green pins (#39ff14) with glow
+- Dynamic clustering: threshold = 2.0/zoom, splits on zoom in
+- Starburst cards: random radii, 3s drift interval, 2.8s CSS transition, z-index shuffle
+- Desktop: hover to show (@media hover:hover), Mobile: tap to toggle
+- Touch guard (500ms) blocks synthetic mouse events after touch
+- City labels at zoom >8x (Jabodetabek)
+- Login-gated: non-approved see pins but no details
+
+## Stats Features
+
+- /api/stats/detail returns all aggregated data
+- Job normalization (Swasta, PNS, etc), Industry normalization, University normalization (UI, ITB, UGM)
+- Scroll-triggered animations via IntersectionObserver
+- Hero counters animate immediately, bars animate on scroll with staggered delay
 
 ## Deploy Workflow
 
 ```bash
 ssh -p 52017 zapa@103.16.198.61
 cd /var/www/alumni
-sudo chown -R zapa:zapa dist/ .astro/   # Fix permissions for build
-npm run build                             # Astro static build
-sudo chown -R www-data:www-data dist/    # Nginx needs www-data ownership
-sudo systemctl reload nginx               # Serve new files
-pm2 restart alumni-api                    # If API code changed
-pm2 save                                  # Persist PM2 config
+sudo chown -R zapa:zapa dist/ .astro/
+npm run build
+sudo chown -R www-data:www-data dist/
+sudo systemctl reload nginx
+pm2 restart alumni-api  # if API changed
 ```
-
-**Shortcut alias** (if configured): `deploy`
-
-## Important Notes
-
-- SSL handled by **Proxmox/OpenResty** reverse proxy — certbot inside container won't work
-- API file is `.cjs` (not `.js`) because Astro sets `"type":"module"` in package.json
-- `dist/` must be owned by `www-data` for Nginx, but `zapa` for build → chown before/after
-- Globe map uses **Canvas** (not SVG) for performance with 50m country data
-- Google OAuth only needs client ID (no secret) — frontend-only flow with JWT decode on server
-- Alumni coordinates set via SQL UPDATE by city name (approximate lat/lng)
-- New cities need manual coordinate assignment in DB
 
 ## What's NOT Built Yet
 
-- **Directory page** — browsable/searchable alumni list
-- **Statistics page** — Chart.js visualizations (career, university, city distribution)
-- **Articles/Blog** — alumni can submit stories (DB table exists, no UI)
-- **Events/RSVP** — reunion planning (DB table exists, no UI)
-- **Photo gallery** — then vs now
-- **Memorial page**
-- **Admin panel** — manage users/data
-- **Auto-geocoding** — new cities don't auto-get lat/lng
-- **Email notifications** — welcome email, password reset
+- Articles/Blog (DB table exists, no UI)
+- Events/RSVP (DB table exists, no UI)
+- Photo Gallery (photos only on individual profiles)
+- Memorial Page
+- Auto-Geocoding for new cities
+- Admin CSV import, merge duplicates, normalize cities
+- Pending user banner on pages
+- WhatsApp integration
+- In-app notifications

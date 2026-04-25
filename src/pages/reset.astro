@@ -1,0 +1,50 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Reset Password - 7099">
+  <div class="min-h-screen flex items-center justify-center px-4 py-12">
+    <div class="w-full max-w-md">
+      <div class="text-center mb-8">
+        <a href="/" class="flex justify-center"><img src="/logo-hero.png" alt="7099" style="height:60px;width:auto"></a>
+        <p class="text-stone-500 mt-1">Reset Password</p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-lg p-8">
+        <div id="error-msg" class="hidden bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-4"></div>
+        <div id="success-msg" class="hidden bg-green-50 text-green-700 text-sm p-3 rounded-lg mb-4"></div>
+        <div id="form-section">
+          <h2 class="text-xl font-bold text-stone-800 mb-4">Password Baru</h2>
+          <form onsubmit="resetPw(event)">
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-stone-700 mb-1">Password Baru</label>
+              <input type="password" id="pw1" required minlength="6" placeholder="Min. 6 karakter" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <div class="mb-6">
+              <label class="block text-sm font-medium text-stone-700 mb-1">Konfirmasi Password</label>
+              <input type="password" id="pw2" required minlength="6" placeholder="Ketik ulang password" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+            </div>
+            <button type="submit" class="w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition">Reset Password</button>
+          </form>
+        </div>
+        <div id="done-section" class="hidden text-center py-4">
+          <p class="text-green-700 font-medium mb-4">Password berhasil direset!</p>
+          <a href="/login" class="bg-amber-800 text-white px-6 py-2 rounded-xl font-semibold hover:bg-amber-900 transition inline-block">Masuk</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script is:inline>
+  var token=new URLSearchParams(window.location.search).get('token');
+  if(!token){document.getElementById('error-msg').textContent='Link tidak valid';document.getElementById('error-msg').classList.remove('hidden');document.getElementById('form-section').classList.add('hidden')}
+  function resetPw(e){
+    e.preventDefault();
+    var p1=document.getElementById('pw1').value,p2=document.getElementById('pw2').value;
+    if(p1!==p2){document.getElementById('error-msg').textContent='Password tidak sama';document.getElementById('error-msg').classList.remove('hidden');return}
+    fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token,password:p1})})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.error){document.getElementById('error-msg').textContent=d.error;document.getElementById('error-msg').classList.remove('hidden')}
+        else{document.getElementById('form-section').classList.add('hidden');document.getElementById('done-section').classList.remove('hidden')}
+      }).catch(function(){document.getElementById('error-msg').textContent='Gagal';document.getElementById('error-msg').classList.remove('hidden')});
+  }
+  </script>
+</Layout>

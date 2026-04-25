@@ -3,6 +3,8 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const multer = require("multer");
 const fs = require("fs");
+const https = require("https");
+const nodemailer = require("nodemailer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Database = require("better-sqlite3");
@@ -59,6 +61,60 @@ const upload = multer({ storage: storage, limits: { fileSize: 5*1024*1024 }, fil
 db.exec("CREATE TABLE IF NOT EXISTS photos (id INTEGER PRIMARY KEY AUTOINCREMENT, alumni_id INTEGER REFERENCES alumni(id), filename TEXT NOT NULL, original_name TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)");
 
 
+
+// Config table
+db.exec("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)");
+
+// Telegram notification
+function sendTelegram(text) {
+  try {
+    var token = db.prepare("SELECT value FROM config WHERE key = 'telegram_bot_token'").get();
+    var chatId = db.prepare("SELECT value FROM config WHERE key = 'telegram_chat_id'").get();
+    if (!token || !chatId || !token.value || !chatId.value) return;
+    var data = JSON.stringify({ chat_id: chatId.value, text: text, parse_mode: "HTML" });
+    var req = https.request({
+      hostname: "api.telegram.org",
+      path: "/bot" + token.value + "/sendMessage",
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }
+    });
+    req.on("error", function(e) { console.error("Telegram error:", e.message); });
+    req.write(data);
+    req.end();
+  } catch(e) { console.error("Telegram error:", e); }
+}
+
+
+// Email notification
+function sendEmail(to, subject, html) {
+  try {
+    var host = db.prepare("SELECT value FROM config WHERE key = 'smtp_host'").get();
+    var port = db.prepare("SELECT value FROM config WHERE key = 'smtp_port'").get();
+    var user = db.prepare("SELECT value FROM config WHERE key = 'smtp_user'").get();
+    var pass = db.prepare("SELECT value FROM config WHERE key = 'smtp_pass'").get();
+    var from = db.prepare("SELECT value FROM config WHERE key = 'smtp_from'").get();
+    if (!host || !user || !pass) return;
+    var transporter = nodemailer.createTransport({
+      host: host.value, port: parseInt(port ? port.value : "587"),
+      secure: false, auth: { user: user.value, pass: pass.value },
+      tls: { rejectUnauthorized: false }
+    });
+    transporter.sendMail({ from: from ? from.value : user.value, to: to, subject: subject, html: html }, function(err) {
+      if (err) console.error("Email error:", err.message);
+    });
+  } catch(e) { console.error("Email error:", e); }
+}
+
+function emailTemplate(title, body, btnText, btnUrl) {
+  return '<div style="max-width:500px;margin:0 auto;font-family:sans-serif;background:#faf8f4;padding:30px 20px">' +
+    '<div style="text-align:center;margin-bottom:20px"><b style="color:#92400e;font-size:20px">Alumni SMU 70 \x2799</b></div>' +
+    '<div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.08)">' +
+    '<h2 style="color:#292524;margin:0 0 12px">' + title + '</h2>' +
+    '<div style="color:#57534e;font-size:14px;line-height:1.6">' + body + '</div>' +
+    (btnText ? '<div style="text-align:center;margin-top:20px"><a href="' + btnUrl + '" style="background:#92400e;color:#fff;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">' + btnText + '</a></div>' : '') +
+    '</div><div style="text-align:center;margin-top:16px;color:#a8a29e;font-size:11px">7099 - Alumni SMAN 70 Jakarta</div></div>';
+}
+
 // ── Auth Middleware ──────────────────────────────────
 function authMiddleware(req, res, next) {
   const token = req.cookies.token || (req.headers.authorization || "").replace("Bearer ", "");
@@ -73,7 +129,7 @@ function authMiddleware(req, res, next) {
 
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id, role: user.role },
+    { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id, role: user.role, status: user.status || "pending" },
     JWT_SECRET,
     { expiresIn: TOKEN_EXPIRY }
   );
@@ -86,6 +142,30 @@ function setTokenCookie(res, token) {
     sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
+}
+
+
+function approvedMiddleware(req, res, next) {
+  const token = req.cookies.token || (req.headers.authorization || "").replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Not authenticated" });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    var u = db.prepare("SELECT status, role FROM users WHERE id = ?").get(req.user.id);
+    if (!u) return res.status(401).json({ error: "User not found" });
+    if (u.status !== "approved" && u.role !== "admin") return res.status(403).json({ error: "pending" });
+    next();
+  } catch(e) { res.status(401).json({ error: "Invalid token" }); }
+}
+
+function adminMiddleware(req, res, next) {
+  const token = req.cookies.token || (req.headers.authorization || "").replace("Bearer ", "");
+  if (!token) return res.status(401).json({ error: "Not authenticated" });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    var u = db.prepare("SELECT role FROM users WHERE id = ?").get(req.user.id);
+    if (!u || u.role !== "admin") return res.status(403).json({ error: "Admin only" });
+    next();
+  } catch(e) { res.status(401).json({ error: "Invalid token" }); }
 }
 
 // ── Match alumni by email or name ───────────────────
@@ -128,13 +208,24 @@ app.post("/api/auth/signup", (req, res) => {
     const password_hash = bcrypt.hashSync(password, 10);
 
     const result = db.prepare(
-      "INSERT INTO users (email, password_hash, name, alumni_id) VALUES (?, ?, ?, ?)"
+      "INSERT INTO users (email, password_hash, name, alumni_id, status) VALUES (?, ?, ?, ?, 'pending')"
     ).run(email.toLowerCase(), password_hash, name || null, match ? match.id : null);
 
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(result.lastInsertRowid);
     const token = generateToken(user);
     setTokenCookie(res, token);
 
+    sendEmail(email, "Pendaftaran Berhasil - Alumni 7099",
+      emailTemplate("Pendaftaran Berhasil! 🎉",
+        "Halo " + (name || "Alumni") + ",<br><br>Akun kamu berhasil dibuat. Saat ini akun kamu sedang <b>menunggu persetujuan admin</b>.<br><br>Kamu akan menerima email lagi ketika akun kamu sudah disetujui.",
+        "Kunjungi Website", "https://zapa.inweb.id"));
+    sendTelegram("🆕 <b>Pendaftaran Baru!</b>\n" +
+      "Nama: " + (name || "-") + "\n" +
+      "Email: " + email + "\n" +
+      "Metode: Email/Password\n" +
+      (match ? "✅ Matched: " + match.name + " (" + (match.nickname||"") + ")\n" : "❌ No alumni match\n") +
+      "Status: ⏳ Pending\n" +
+      "👉 https://zapa.inweb.id/admin");
     res.json({
       success: true,
       user: { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id },
@@ -184,6 +275,7 @@ app.post("/api/auth/google", async (req, res) => {
 
     // Check if user exists
     let user = db.prepare("SELECT * FROM users WHERE google_id = ? OR LOWER(email) = LOWER(?)").get(googleId, email);
+    var isNewUser = !user;
 
     if (user) {
       // Update google_id if not set
@@ -194,7 +286,7 @@ app.post("/api/auth/google", async (req, res) => {
       // New user - try to match alumni
       const { match, confidence } = findAlumniMatch(email, name);
       db.prepare(
-        "INSERT INTO users (email, google_id, name, alumni_id) VALUES (?, ?, ?, ?)"
+        "INSERT INTO users (email, google_id, name, alumni_id, status) VALUES (?, ?, ?, ?, 'pending')"
       ).run(email.toLowerCase(), googleId, name, match ? match.id : null);
       user = db.prepare("SELECT * FROM users WHERE google_id = ?").get(googleId);
     }
@@ -204,6 +296,20 @@ app.post("/api/auth/google", async (req, res) => {
 
     const alumniMatch = user.alumni_id ? db.prepare("SELECT * FROM alumni WHERE id = ?").get(user.alumni_id) : null;
 
+    // Notify only on NEW Google signup (not returning users)
+    if (isNewUser) {
+      sendEmail(email, "Pendaftaran Berhasil - Alumni 7099",
+      emailTemplate("Pendaftaran Berhasil! 🎉",
+        "Halo " + (name || "Alumni") + ",<br><br>Akun kamu berhasil dibuat. Saat ini akun kamu sedang <b>menunggu persetujuan admin</b>.<br><br>Kamu akan menerima email lagi ketika akun kamu sudah disetujui.",
+        "Kunjungi Website", "https://zapa.inweb.id"));
+    sendTelegram("🆕 <b>Pendaftaran Baru!</b>\n" +
+        "Nama: " + (name || "-") + "\n" +
+        "Email: " + email + "\n" +
+        "Metode: Google\n" +
+        (alumniMatch ? "✅ Matched: " + alumniMatch.name + " (" + (alumniMatch.nickname||"") + ")\n" : "❌ No alumni match\n") +
+        "Status: ⏳ Pending\n" +
+        "👉 https://zapa.inweb.id/admin");
+    }
     res.json({
       success: true,
       user: { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id },
@@ -217,7 +323,7 @@ app.post("/api/auth/google", async (req, res) => {
 
 // Get current user
 app.get("/api/auth/me", authMiddleware, (req, res) => {
-  const user = db.prepare("SELECT id, email, name, alumni_id, role, created_at FROM users WHERE id = ?").get(req.user.id);
+  const user = db.prepare("SELECT id, email, name, alumni_id, role, status, created_at FROM users WHERE id = ?").get(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
   let profile = null;
@@ -246,7 +352,7 @@ app.get("/api/profile", authMiddleware, (req, res) => {
 });
 
 // Update or create profile
-app.put("/api/profile", authMiddleware, (req, res) => {
+app.put("/api/profile", approvedMiddleware, (req, res) => {
   try {
     const { name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, class: kelas } = req.body;
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
@@ -281,7 +387,7 @@ app.put("/api/profile", authMiddleware, (req, res) => {
 });
 
 // Search alumni (for matching)
-app.get("/api/alumni/search", authMiddleware, (req, res) => {
+app.get("/api/alumni/search", approvedMiddleware, (req, res) => {
   const q = req.query.q || "";
   if (q.length < 2) return res.json([]);
   const results = db.prepare(
@@ -291,7 +397,7 @@ app.get("/api/alumni/search", authMiddleware, (req, res) => {
 });
 
 // Link user to existing alumni
-app.post("/api/profile/link", authMiddleware, (req, res) => {
+app.post("/api/profile/link", approvedMiddleware, (req, res) => {
   const { alumni_id } = req.body;
   const alumni = db.prepare("SELECT * FROM alumni WHERE id = ?").get(alumni_id);
   if (!alumni) return res.status(404).json({ error: "Alumni not found" });
@@ -304,7 +410,7 @@ app.post("/api/profile/link", authMiddleware, (req, res) => {
 // ── PHOTO ROUTES ────────────────────────────────────
 
 // Upload photos
-app.post("/api/profile/photos", authMiddleware, upload.array("photos", 10), (req, res) => {
+app.post("/api/profile/photos", approvedMiddleware, upload.array("photos", 10), (req, res) => {
   try {
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
     if (!user || !user.alumni_id) return res.status(400).json({ error: "No profile linked" });
@@ -330,7 +436,7 @@ app.get("/api/profile/photos", authMiddleware, (req, res) => {
 });
 
 // Delete a photo
-app.delete("/api/profile/photos/:id", authMiddleware, (req, res) => {
+app.delete("/api/profile/photos/:id", approvedMiddleware, (req, res) => {
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
   const photo = db.prepare("SELECT * FROM photos WHERE id = ? AND alumni_id = ?").get(req.params.id, user.alumni_id);
   if (!photo) return res.status(404).json({ error: "Photo not found" });
@@ -341,7 +447,7 @@ app.delete("/api/profile/photos/:id", authMiddleware, (req, res) => {
 
 
 // Directory (login required)
-app.get("/api/directory", authMiddleware, (req, res) => {
+app.get("/api/directory", approvedMiddleware, (req, res) => {
   const alumni = db.prepare("SELECT id, name, nickname, city, country, job_title, company, class, hobby, university, bio FROM alumni WHERE is_public = 1 ORDER BY name").all();
   const photos = db.prepare("SELECT alumni_id, filename FROM photos ORDER BY created_at DESC").all();
   const photoMap = {};
@@ -508,6 +614,157 @@ app.get("/api/stats/detail", (req, res) => {
     zodiacs, months, bdayThisMonth: bdayThisMonth.sort((a,b)=>a.day-b.day),
     farthest
   });
+});
+
+
+
+// Forgot password
+app.post("/api/auth/forgot-password", (req, res) => {
+  try {
+    var { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email required" });
+    var user = db.prepare("SELECT * FROM users WHERE LOWER(email) = LOWER(?)").get(email);
+    if (!user) return res.json({ success: true }); // Don't reveal if email exists
+    if (!user.password_hash) return res.json({ success: true }); // Google users can't reset
+    var token = crypto.randomBytes(32).toString("hex");
+    var expires = new Date(Date.now() + 3600000).toISOString(); // 1 hour
+    db.prepare("UPDATE users SET reset_token = ?, reset_expires = ? WHERE id = ?").run(token, expires, user.id);
+    sendEmail(user.email, "Reset Password - Alumni 7099",
+      emailTemplate("Reset Password",
+        "Halo " + (user.name || "Alumni") + ",<br><br>Kamu meminta reset password. Klik tombol di bawah untuk membuat password baru. Link ini berlaku <b>1 jam</b>.<br><br>Jika kamu tidak meminta ini, abaikan email ini.",
+        "Reset Password", "https://zapa.inweb.id/reset?token=" + token));
+    res.json({ success: true });
+  } catch(e) { console.error("Forgot password error:", e); res.status(500).json({ error: "Failed" }); }
+});
+
+// Reset password
+app.post("/api/auth/reset-password", (req, res) => {
+  try {
+    var { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: "Token and password required" });
+    if (password.length < 6) return res.status(400).json({ error: "Password min 6 characters" });
+    var user = db.prepare("SELECT * FROM users WHERE reset_token = ?").get(token);
+    if (!user) return res.status(400).json({ error: "Invalid or expired link" });
+    if (new Date(user.reset_expires) < new Date()) return res.status(400).json({ error: "Link expired" });
+    var hash = bcrypt.hashSync(password, 10);
+    db.prepare("UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?").run(hash, user.id);
+    res.json({ success: true });
+  } catch(e) { console.error("Reset password error:", e); res.status(500).json({ error: "Failed" }); }
+});
+
+// ── ADMIN ROUTES ────────────────────────────────────
+
+app.get("/api/admin/dashboard", adminMiddleware, (req, res) => {
+  res.json({
+    total_alumni: db.prepare("SELECT COUNT(*) as c FROM alumni").get().c,
+    total_users: db.prepare("SELECT COUNT(*) as c FROM users").get().c,
+    pending_users: db.prepare("SELECT COUNT(*) as c FROM users WHERE status = 'pending'").get().c,
+    approved_users: db.prepare("SELECT COUNT(*) as c FROM users WHERE status = 'approved'").get().c,
+    rejected_users: db.prepare("SELECT COUNT(*) as c FROM users WHERE status = 'rejected'").get().c,
+    total_photos: db.prepare("SELECT COUNT(*) as c FROM photos").get().c,
+    total_cities: db.prepare("SELECT COUNT(DISTINCT city) as c FROM alumni WHERE city IS NOT NULL AND city != ''").get().c,
+  });
+});
+
+app.get("/api/admin/pending", adminMiddleware, (req, res) => {
+  const users = db.prepare("SELECT u.id, u.email, u.name, u.google_id, u.alumni_id, u.status, u.created_at, a.name as alumni_name, a.nickname as alumni_nick, a.city as alumni_city FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id WHERE u.status = 'pending' ORDER BY u.created_at DESC").all();
+  res.json(users);
+});
+
+app.post("/api/admin/approve/:id", adminMiddleware, (req, res) => {
+  db.prepare("UPDATE users SET status = 'approved' WHERE id = ?").run(req.params.id);
+  var u = db.prepare("SELECT email, name FROM users WHERE id = ?").get(req.params.id);
+  if (u) sendEmail(u.email, "Akun Disetujui - Alumni 7099",
+    emailTemplate("Akun Kamu Disetujui! ✅",
+      "Halo " + (u.name || "Alumni") + ",<br><br>Selamat! Akun kamu telah <b>disetujui</b> oleh admin. Kamu sekarang bisa mengakses semua fitur website alumni termasuk:<br><br>• Direktori alumni<br>• Peta interaktif<br>• Edit profil<br>• Upload foto",
+      "Masuk Sekarang", "https://zapa.inweb.id/login"));
+  res.json({ success: true });
+});
+
+app.post("/api/admin/reject/:id", adminMiddleware, (req, res) => {
+  db.prepare("UPDATE users SET status = 'rejected' WHERE id = ?").run(req.params.id);
+  var u = db.prepare("SELECT email, name FROM users WHERE id = ?").get(req.params.id);
+  if (u) sendEmail(u.email, "Pendaftaran Ditolak - Alumni 7099",
+    emailTemplate("Pendaftaran Ditolak",
+      "Halo " + (u.name || "") + ",<br><br>Maaf, pendaftaran akun kamu <b>tidak disetujui</b> oleh admin.<br><br>Jika kamu merasa ini adalah kesalahan, silakan hubungi admin di grup alumni.",
+      null, null));
+  res.json({ success: true });
+});
+
+app.get("/api/admin/alumni", adminMiddleware, (req, res) => {
+  res.json(db.prepare("SELECT * FROM alumni ORDER BY name").all());
+});
+
+app.put("/api/admin/alumni/:id", adminMiddleware, (req, res) => {
+  const { name, nickname, email, phone, city, country, job_title, company, class: kelas, university, hobby, birthday, gender, address, latitude, longitude } = req.body;
+  db.prepare("UPDATE alumni SET name=?, nickname=?, email=?, phone=?, city=?, country=?, job_title=?, company=?, class=?, university=?, hobby=?, birthday=?, gender=?, address=?, latitude=?, longitude=? WHERE id=?")
+    .run(name, nickname, email, phone, city, country, job_title, company, kelas, university, hobby, birthday, gender, address, latitude, longitude, req.params.id);
+  res.json({ success: true });
+});
+
+app.delete("/api/admin/alumni/:id", adminMiddleware, (req, res) => {
+  db.prepare("DELETE FROM photos WHERE alumni_id = ?").run(req.params.id);
+  db.prepare("UPDATE users SET alumni_id = NULL WHERE alumni_id = ?").run(req.params.id);
+  db.prepare("DELETE FROM alumni WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/users", adminMiddleware, (req, res) => {
+  res.json(db.prepare("SELECT u.id, u.email, u.name, u.role, u.status, u.alumni_id, u.google_id, u.created_at, a.name as alumni_name FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id ORDER BY u.created_at DESC").all());
+});
+
+app.put("/api/admin/users/:id", adminMiddleware, (req, res) => {
+  const { role, status } = req.body;
+  if (role) db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, req.params.id);
+  if (status) db.prepare("UPDATE users SET status = ? WHERE id = ?").run(status, req.params.id);
+  res.json({ success: true });
+});
+
+app.delete("/api/admin/users/:id", adminMiddleware, (req, res) => {
+  db.prepare("DELETE FROM users WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+app.get("/api/admin/export", adminMiddleware, (req, res) => {
+  const alumni = db.prepare("SELECT * FROM alumni ORDER BY name").all();
+  var csv = Object.keys(alumni[0] || {}).join(",") + "\n";
+  alumni.forEach(a => { csv += Object.values(a).map(v => '"'+(v||"").toString().replace(/"/g,'""')+'"').join(",") + "\n"; });
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", "attachment; filename=alumni_export.csv");
+  res.send(csv);
+});
+
+
+// Config endpoints
+app.get("/api/admin/config", adminMiddleware, (req, res) => {
+  var rows = db.prepare("SELECT * FROM config").all();
+  var cfg = {};
+  rows.forEach(r => { cfg[r.key] = r.value; });
+  res.json(cfg);
+});
+
+app.put("/api/admin/config", adminMiddleware, (req, res) => {
+  var { telegram_bot_token, telegram_chat_id, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from } = req.body;
+  if (telegram_bot_token !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('telegram_bot_token', ?)").run(telegram_bot_token);
+  if (telegram_chat_id !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('telegram_chat_id', ?)").run(telegram_chat_id);
+  if (smtp_host !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_host', ?)").run(smtp_host);
+  if (smtp_port !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_port', ?)").run(smtp_port);
+  if (smtp_user !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_user', ?)").run(smtp_user);
+  if (smtp_pass !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_pass', ?)").run(smtp_pass);
+  if (smtp_from !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_from', ?)").run(smtp_from);
+  res.json({ success: true });
+});
+
+app.post("/api/admin/email-test", adminMiddleware, (req, res) => {
+  var admin = db.prepare("SELECT email, name FROM users WHERE id = ?").get(req.user.id);
+  sendEmail(admin.email, "Test Email - Alumni 7099",
+    emailTemplate("Test Email 🔔", "Jika kamu menerima email ini, konfigurasi SMTP sudah benar!", "Buka Admin", "https://zapa.inweb.id/admin"));
+  res.json({ success: true });
+});
+
+app.post("/api/admin/telegram-test", adminMiddleware, (req, res) => {
+  sendTelegram("🔔 <b>Test Notification</b>\nBot 7099 Alumni is working!\n👉 https://zapa.inweb.id/admin");
+  res.json({ success: true });
 });
 
 // ── Start ───────────────────────────────────────────
