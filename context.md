@@ -23,38 +23,36 @@ Browser → https://zapa.inweb.id
 
 ## Tech Stack
 
-- **Astro v6** + **Tailwind CSS v4** (static site)
-- **Express.js** API (`api/server.cjs` — CommonJS because Astro sets type:module)
+- **Astro v6** + **Tailwind CSS v4** (static site, 9 pages)
+- **Express.js** API (`api/server.cjs` — CommonJS)
 - **SQLite** via `better-sqlite3`
 - **D3.js v7** + **TopoJSON** + **Canvas** for globe map
 - **Chart.js** for statistics
 - **JWT** auth (HttpOnly cookies) + **Google Sign-In**
 - **nodemailer** for SMTP emails
-- **multer** for photo uploads
+- **multer** for file uploads + **sharp** for image resizing
 - **PM2** process manager, **Node.js v22**
 
 ## Database Schema
 
 ```sql
--- 210 alumni records
 CREATE TABLE alumni (id, name, nickname, email, phone, city, country,
   latitude, longitude, university, degree, job_title, company, industry,
   bio, photo_url, is_public, created_at, google_id,
   birthday, gender, address, hobby, class);
 
--- Users with approval system
 CREATE TABLE users (id, email, password_hash, google_id, name,
   alumni_id REFERENCES alumni(id), role DEFAULT 'user',
-  status DEFAULT 'pending', -- pending|approved|rejected
-  reset_token, reset_expires, created_at);
+  status DEFAULT 'pending', reset_token, reset_expires, created_at);
 
 CREATE TABLE photos (id, alumni_id, filename, original_name, created_at);
-CREATE TABLE articles (id, author_id, title, content, published_at, status DEFAULT 'draft');
+CREATE TABLE articles (id, author_id, title, content, cover_image,
+  published_at, status DEFAULT 'draft', created_at, updated_at);
 CREATE TABLE events (id, title, description, event_date, location, rsvp_count);
 CREATE TABLE config (key PRIMARY KEY, value); -- telegram + smtp settings
 ```
 
-## Pages (8 total)
+## Pages (9 total)
 
 | Page | URL | Auth | Description |
 |------|-----|------|-------------|
@@ -65,40 +63,41 @@ CREATE TABLE config (key PRIMARY KEY, value); -- telegram + smtp settings
 | Map | `/map` | Public (details: approved) | D3 canvas globe, neon pins, starburst cards, dynamic clustering |
 | Stats | `/stats` | Public | 12 chart sections, scroll animations, Chart.js |
 | Directory | `/directory` | Approved | Searchable card grid, filter by class/city |
+| Articles | `/articles` | Public (write: approved) | Article list, read, write/edit with inline image upload |
 | Admin | `/admin` | Admin only | Dashboard, approval queue, alumni/user management, settings |
 
-## Auth System
+## Auth & Approval System
 
-- **3 middlewares:** `authMiddleware` (JWT valid), `approvedMiddleware` (status=approved), `adminMiddleware` (role=admin)
+- **3 middlewares:** `authMiddleware`, `approvedMiddleware`, `adminMiddleware`
 - **Signup flow:** New user → status='pending' → admin approves → status='approved'
-- **Protected by approvedMiddleware:** directory, profile edit, photo upload, alumni search, profile link
-- **Admin account:** bengek70@gmail.com (role=admin, status=approved)
+- **Admin account:** bengek70@gmail.com
+- **Google OAuth Client ID:** 1035245406806-...
 
 ## Notifications
 
-- **Telegram:** Bot sends to group on new registration. Config in DB (token + chat_id).
-- **Email (SMTP):** Welcome on signup, approval/rejection from admin, password reset. SMTP: dr6101.inweb.id:587, zapa@inweb.id
-- Both configurable in admin Settings tab
+- **Telegram:** Bot notifies group on new registration. Token + chat_id in config table.
+- **Email (SMTP):** dr6101.inweb.id:587, zapa@inweb.id. Welcome, approval, rejection, password reset emails.
+- Both configurable in admin Settings tab with test buttons.
 
-## Map Features
+## Articles System
 
-- D3 orthographic globe on Canvas (not SVG)
-- Neon green pins (#39ff14) with glow
-- Dynamic clustering: threshold = 2.0/zoom, splits on zoom in
-- Starburst cards: random radii, 3s drift interval, 2.8s CSS transition, z-index shuffle
-- Desktop: hover to show (@media hover:hover), Mobile: tap to toggle
-- Touch guard (500ms) blocks synthetic mouse events after touch
-- City labels at zoom >8x (Jabodetabek)
-- Login-gated: non-approved see pins but no details
+- 36 articles imported from Instagram (@zapatista7099)
+- Public can read published articles
+- Approved users can write/edit own articles
+- Inline image upload with auto-resize (sharp, max 800px, JPEG 80%)
+- Cover image upload with auto-resize
+- `[foto: /photos/xxx.jpg]` syntax in content renders as inline images
+- Author or admin can edit/delete any article
 
-## Stats Features
+## Key Features
 
-- /api/stats/detail returns all aggregated data
-- Job normalization (Swasta, PNS, etc), Industry normalization, University normalization (UI, ITB, UGM)
-- Scroll-triggered animations via IntersectionObserver
-- Hero counters animate immediately, bars animate on scroll with staggered delay
+- **Globe Map:** D3 orthographic canvas, neon green pins, dynamic clustering, starburst cards with drift, touch/hover separation via @media(hover:hover)
+- **Statistics:** IPA vs IPS, class ranking, zodiac, birthdays, city/job/university bars, hobby cloud, progress ring, scroll animations
+- **Directory:** Login-gated searchable card grid with class/city filters
+- **Profile:** Auto-match alumni on signup, all fields including class/photo/university
+- **Branding:** Zapa logos (nav + hero), brown/#b39c82 gradient theme
 
-## Deploy Workflow
+## Deploy
 
 ```bash
 ssh -p 52017 zapa@103.16.198.61
@@ -112,7 +111,6 @@ pm2 restart alumni-api  # if API changed
 
 ## What's NOT Built Yet
 
-- Articles/Blog (DB table exists, no UI)
 - Events/RSVP (DB table exists, no UI)
 - Photo Gallery (photos only on individual profiles)
 - Memorial Page
@@ -120,4 +118,3 @@ pm2 restart alumni-api  # if API changed
 - Admin CSV import, merge duplicates, normalize cities
 - Pending user banner on pages
 - WhatsApp integration
-- In-app notifications

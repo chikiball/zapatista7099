@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const multer = require("multer");
+const sharp = require("sharp");
 const fs = require("fs");
 const https = require("https");
 const nodemailer = require("nodemailer");
@@ -454,6 +455,101 @@ app.get("/api/directory", approvedMiddleware, (req, res) => {
   photos.forEach(p => { if(!photoMap[p.alumni_id]) photoMap[p.alumni_id] = p.filename; });
   alumni.forEach(a => { a.photo = photoMap[a.id] || null; });
   res.json(alumni);
+});
+
+
+// ── ARTICLE ROUTES ──────────────────────────────────
+
+// List published articles (public)
+app.get("/api/articles", (req, res) => {
+  var articles = db.prepare("SELECT a.*, al.name as author_name, al.nickname as author_nick FROM articles a LEFT JOIN alumni al ON a.author_id = al.id WHERE a.status = 'published' ORDER BY a.published_at DESC").all();
+  res.json(articles);
+});
+
+// Single article (public if published)
+app.get("/api/articles/:id", (req, res) => {
+  var a = db.prepare("SELECT a.*, al.name as author_name, al.nickname as author_nick FROM articles a LEFT JOIN alumni al ON a.author_id = al.id WHERE a.id = ?").get(req.params.id);
+  if (!a) return res.status(404).json({ error: "Not found" });
+  if (a.status !== "published") {
+    var token = req.cookies.token || (req.headers.authorization || "").replace("Bearer ", "");
+    try { var user = jwt.verify(token, JWT_SECRET); if (a.author_id !== user.alumni_id && user.role !== "admin") return res.status(404).json({ error: "Not found" }); }
+    catch(e) { return res.status(404).json({ error: "Not found" }); }
+  }
+  res.json(a);
+});
+
+// My articles (drafts + published)
+app.get("/api/articles/mine/list", approvedMiddleware, (req, res) => {
+  var user = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+  if (!user || !user.alumni_id) return res.json([]);
+  res.json(db.prepare("SELECT * FROM articles WHERE author_id = ? ORDER BY created_at DESC").all(user.alumni_id));
+});
+
+// Create article
+app.post("/api/articles", approvedMiddleware, (req, res) => {
+  var user = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+  if (!user || !user.alumni_id) return res.status(400).json({ error: "No profile" });
+  var { title, content, status } = req.body;
+  if (!title) return res.status(400).json({ error: "Title required" });
+  var now = new Date().toISOString();
+  var pub = status === "published" ? now : null;
+  var result = db.prepare("INSERT INTO articles (author_id, title, content, status, published_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(user.alumni_id, title, content || "", status || "draft", pub, now, now);
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+// Update article
+app.put("/api/articles/:id", approvedMiddleware, (req, res) => {
+  var user = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+  var article = db.prepare("SELECT * FROM articles WHERE id = ?").get(req.params.id);
+  if (!article) return res.status(404).json({ error: "Not found" });
+  if (article.author_id !== user.alumni_id && req.user.role !== "admin") return res.status(403).json({ error: "Not yours" });
+  var { title, content, status } = req.body;
+  var now = new Date().toISOString();
+  var pub = status === "published" && !article.published_at ? now : article.published_at;
+  db.prepare("UPDATE articles SET title=?, content=?, status=?, published_at=?, updated_at=? WHERE id=?").run(title, content, status, pub, now, req.params.id);
+  res.json({ success: true });
+});
+
+// Delete article
+app.delete("/api/articles/:id", approvedMiddleware, (req, res) => {
+  var user = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+  var article = db.prepare("SELECT * FROM articles WHERE id = ?").get(req.params.id);
+  if (!article) return res.status(404).json({ error: "Not found" });
+  if (article.author_id !== user.alumni_id && req.user.role !== "admin") return res.status(403).json({ error: "Not yours" });
+  db.prepare("DELETE FROM articles WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// Upload cover image
+app.post("/api/articles/:id/cover", approvedMiddleware, upload.single("cover"), async (req, res) => {
+  var user = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+  var article = db.prepare("SELECT * FROM articles WHERE id = ?").get(req.params.id);
+  if (!article || (article.author_id !== user.alumni_id && req.user.role !== "admin")) return res.status(403).json({ error: "Not allowed" });
+  // Resize cover
+    var outName = "cover-" + Date.now() + ".jpg";
+    var outPath = require("path").join(__dirname, "..", "public", "photos", outName);
+    await sharp(req.file.path).resize(800, null, { withoutEnlargement: true, fit: "inside" }).jpeg({ quality: 80 }).toFile(outPath);
+    try { fs.unlinkSync(req.file.path); } catch(e) {}
+    db.prepare("UPDATE articles SET cover_image = ? WHERE id = ?").run(outName, req.params.id);
+    res.json({ success: true, filename: outName });
+});
+
+
+// Upload inline image for article (resized to max 800px wide)
+app.post("/api/articles/upload-image", approvedMiddleware, upload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file" });
+    var ext = req.file.originalname.split(".").pop().toLowerCase();
+    var outName = Date.now() + "-" + Math.random().toString(36).substr(2,6) + ".jpg";
+    var outPath = require("path").join(__dirname, "..", "public", "photos", outName);
+    await sharp(req.file.path).resize(800, null, { withoutEnlargement: true, fit: "inside" }).jpeg({ quality: 80 }).toFile(outPath);
+    // Remove original
+    try { fs.unlinkSync(req.file.path); } catch(e) {}
+    res.json({ success: true, url: "/photos/" + outName, filename: outName });
+  } catch(e) {
+    console.error("Image upload error:", e);
+    res.status(500).json({ error: "Upload failed" });
+  }
 });
 
 // ── PUBLIC ROUTES ───────────────────────────────────

@@ -1,0 +1,229 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Cerita & Artikel - 7099">
+  <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="block"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    </div>
+  </nav>
+
+  <div class="max-w-3xl mx-auto px-4 py-6">
+    <!-- Views: list / read / write -->
+    <div id="v-list">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-stone-800">Cerita & Artikel</h2>
+        <button type="button" id="btn-write" class="hidden bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900" onclick="showWrite()">+ Tulis</button>
+      </div>
+      <div id="articles-list"></div>
+      <p id="empty-msg" class="hidden text-center text-stone-400 py-12">Belum ada artikel. Jadilah yang pertama menulis!</p>
+    </div>
+
+    <div id="v-read" class="hidden">
+      <button type="button" onclick="showList()" class="text-sm text-amber-700 hover:underline mb-4 inline-block">&larr; Kembali</button>
+      <div id="read-cover" class="mb-4"></div>
+      <h1 id="read-title" class="text-3xl font-bold text-stone-800 mb-2"></h1>
+      <div id="read-meta" class="text-sm text-stone-500 mb-6"></div>
+      <div id="read-body" class="prose text-stone-700 leading-relaxed" style="white-space:pre-wrap"></div>
+      <div id="read-actions" class="hidden mt-6 pt-4 border-t flex gap-3">
+        <button type="button" onclick="editArticle()" class="text-sm text-amber-700 hover:underline">Edit</button>
+        <button type="button" onclick="deleteArticle()" class="text-sm text-red-500 hover:underline">Hapus</button>
+      </div>
+    </div>
+
+    <div id="v-write" class="hidden">
+      <button type="button" onclick="showList()" class="text-sm text-amber-700 hover:underline mb-4 inline-block">&larr; Batal</button>
+      <h2 class="text-2xl font-bold text-stone-800 mb-4" id="write-title-h">Tulis Artikel</h2>
+      <div id="write-msg" class="hidden text-sm mb-3"></div>
+      <form onsubmit="saveArticle(event)">
+        <div class="mb-4">
+          <input type="text" id="w-title" required placeholder="Judul artikel..." class="w-full border border-stone-300 rounded-xl px-4 py-3 text-lg font-semibold focus:ring-2 focus:ring-amber-500 outline-none">
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-stone-500 mb-1">Cover Image (opsional)</label>
+          <input type="file" id="w-cover" accept="image/*" class="text-sm">
+        </div>
+        <div class="mb-4">
+          <div class="flex gap-2 mb-2">
+          <label class="cursor-pointer text-xs bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg text-stone-600 transition">
+            📷 Sisipkan Foto
+            <input type="file" id="w-inline-img" accept="image/*" class="hidden" onchange="uploadInlineImage(this)">
+          </label>
+          <span id="img-upload-status" class="text-xs text-stone-400 self-center"></span>
+        </div>
+        <textarea id="w-content" rows="15" placeholder="Tulis ceritamu di sini..." class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm leading-relaxed focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+        </div>
+        <div class="flex gap-3">
+          <button type="submit" name="action" value="published" class="bg-amber-800 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">Publish</button>
+          <button type="submit" name="action" value="draft" class="border border-stone-300 text-stone-600 px-6 py-2 rounded-lg text-sm hover:bg-stone-50">Simpan Draft</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script is:inline>
+  var isAuth=false,isApproved=false,currentId=null,editingId=null,myAlumniId=null;
+
+  fetch('/api/auth/me',{credentials:'include'}).then(function(r){
+    if(!r.ok)return;
+    r.json().then(function(d){
+      isAuth=true;
+      isApproved=d.user.status==='approved'||d.user.role==='admin';
+      myAlumniId=d.user.alumni_id;
+      document.getElementById('nav-login').textContent=d.user.name||d.user.email;
+      document.getElementById('nav-login').href='/profile';
+      if(isApproved)document.getElementById('btn-write').classList.remove('hidden');
+    });
+  }).catch(function(){});
+
+  
+  function uploadInlineImage(input) {
+    if (!input.files[0]) return;
+    var fd = new FormData();
+    fd.append('image', input.files[0]);
+    document.getElementById('img-upload-status').textContent = 'Uploading...';
+    fetch('/api/articles/upload-image', {method:'POST', credentials:'include', body:fd})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        if (d.url) {
+          var ta = document.getElementById('w-content');
+          var pos = ta.selectionStart || ta.value.length;
+          var before = ta.value.substring(0, pos);
+          var after = ta.value.substring(pos);
+          ta.value = before + '\n[foto: ' + d.url + ']\n' + after;
+          document.getElementById('img-upload-status').textContent = '✅ Foto ditambahkan';
+        } else {
+          document.getElementById('img-upload-status').textContent = '❌ Gagal';
+        }
+        input.value = '';
+        setTimeout(function(){ document.getElementById('img-upload-status').textContent = ''; }, 2000);
+      });
+  }
+
+  loadArticles();
+
+  function loadArticles(){
+    fetch('/api/articles').then(function(r){return r.json()}).then(function(list){
+      if(!list.length){document.getElementById('empty-msg').classList.remove('hidden');document.getElementById('articles-list').innerHTML='';return}
+      document.getElementById('empty-msg').classList.add('hidden');
+      document.getElementById('articles-list').innerHTML=list.map(function(a){
+        var cover=a.cover_image?'<img src="/photos/'+a.cover_image+'" class="w-24 h-24 rounded-lg object-cover flex-shrink-0">':'';
+        var preview=(a.content||'').substring(0,150).replace(/</g,'&lt;')+(a.content&&a.content.length>150?'...':'');
+        var date=a.published_at?timeAgo(a.published_at):'';
+        return '<a href="javascript:void(0)" onclick="readArticle('+a.id+')" class="block bg-white rounded-xl shadow-sm p-4 mb-4 hover:shadow-md transition"><div class="flex gap-4">'+cover+'<div class="flex-1 min-w-0"><h3 class="font-bold text-stone-800 mb-1">'+a.title+'</h3><div class="text-xs text-stone-500 mb-2">'+(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'')+' &bull; '+date+'</div><p class="text-sm text-stone-600 line-clamp-2">'+preview+'</p></div></div></a>';
+      }).join('');
+    });
+    // Check URL for ?id=
+    var params=new URLSearchParams(window.location.search);
+    if(params.get('id'))readArticle(parseInt(params.get('id')));
+  }
+
+  function readArticle(id){
+    currentId=id;
+    fetch('/api/articles/'+id).then(function(r){
+      if(!r.ok){showList();return}
+      return r.json();
+    }).then(function(a){
+      if(!a)return;
+      document.getElementById('read-title').textContent=a.title;
+      document.getElementById('read-meta').textContent=(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'')+' &bull; '+(a.published_at?new Date(a.published_at).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}):'Draft');
+      var bodyHtml = (a.content||'').replace(/</g,'&lt;').replace(/\[foto: ([^\]]+)\]/g, '<img src="$1" class="rounded-lg my-3 max-w-full">').replace(/\n/g,'<br>');
+      document.getElementById('read-body').innerHTML=bodyHtml;
+      document.getElementById('read-cover').innerHTML=a.cover_image?'<img src="/photos/'+a.cover_image+'" class="w-full rounded-xl max-h-64 object-cover">':'';
+      if(isAuth&&(a.author_id===myAlumniId||(isApproved&&isAuth)))document.getElementById('read-actions').classList.remove('hidden');
+      else document.getElementById('read-actions').classList.add('hidden');
+      document.getElementById('v-list').classList.add('hidden');
+      document.getElementById('v-read').classList.remove('hidden');
+      document.getElementById('v-write').classList.add('hidden');
+      history.replaceState(null,'','?id='+id);
+    });
+  }
+
+  function showList(){
+    document.getElementById('v-list').classList.remove('hidden');
+    document.getElementById('v-read').classList.add('hidden');
+    document.getElementById('v-write').classList.add('hidden');
+    currentId=null;editingId=null;
+    history.replaceState(null,'','/articles');
+    
+  function uploadInlineImage(input) {
+    if (!input.files[0]) return;
+    var fd = new FormData();
+    fd.append('image', input.files[0]);
+    document.getElementById('img-upload-status').textContent = 'Uploading...';
+    fetch('/api/articles/upload-image', {method:'POST', credentials:'include', body:fd})
+      .then(function(r){return r.json()})
+      .then(function(d){
+        if (d.url) {
+          var ta = document.getElementById('w-content');
+          var pos = ta.selectionStart || ta.value.length;
+          var before = ta.value.substring(0, pos);
+          var after = ta.value.substring(pos);
+          ta.value = before + '\n[foto: ' + d.url + ']\n' + after;
+          document.getElementById('img-upload-status').textContent = '✅ Foto ditambahkan';
+        } else {
+          document.getElementById('img-upload-status').textContent = '❌ Gagal';
+        }
+        input.value = '';
+        setTimeout(function(){ document.getElementById('img-upload-status').textContent = ''; }, 2000);
+      });
+  }
+
+  loadArticles();
+  }
+
+  function showWrite(){
+    editingId=null;
+    document.getElementById('write-title-h').textContent='Tulis Artikel';
+    document.getElementById('w-title').value='';
+    document.getElementById('w-content').value='';
+    document.getElementById('v-list').classList.add('hidden');
+    document.getElementById('v-read').classList.add('hidden');
+    document.getElementById('v-write').classList.remove('hidden');
+  }
+
+  function editArticle(){
+    editingId=currentId;
+    fetch('/api/articles/'+currentId,{credentials:'include'}).then(function(r){return r.json()}).then(function(a){
+      document.getElementById('write-title-h').textContent='Edit Artikel';
+      document.getElementById('w-title').value=a.title||'';
+      document.getElementById('w-content').value=a.content||'';
+      document.getElementById('v-list').classList.add('hidden');
+      document.getElementById('v-read').classList.add('hidden');
+      document.getElementById('v-write').classList.remove('hidden');
+    });
+  }
+
+  function saveArticle(e){
+    e.preventDefault();
+    var action=e.submitter?e.submitter.value:'draft';
+    var title=document.getElementById('w-title').value;
+    var content=document.getElementById('w-content').value;
+    var url=editingId?'/api/articles/'+editingId:'/api/articles';
+    var method=editingId?'PUT':'POST';
+
+    fetch(url,{method:method,headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({title:title,content:content,status:action})})
+    .then(function(r){return r.json()}).then(function(d){
+      if(d.error){var m=document.getElementById('write-msg');m.textContent=d.error;m.className='text-sm mb-3 text-red-700';return}
+      var artId=editingId||d.id;
+      // Upload cover if selected
+      var coverFile=document.getElementById('w-cover').files[0];
+      if(coverFile){
+        var fd=new FormData();fd.append('cover',coverFile);
+        fetch('/api/articles/'+artId+'/cover',{method:'POST',credentials:'include',body:fd}).then(function(){
+          showList();
+        });
+      }else{showList()}
+    });
+  }
+
+  function deleteArticle(){
+    if(!confirm('Hapus artikel ini?'))return;
+    fetch('/api/articles/'+currentId,{method:'DELETE',credentials:'include'}).then(function(){showList()});
+  }
+
+  function timeAgo(d){if(!d)return'';var s=Math.floor((Date.now()-new Date(d).getTime())/1000);if(s<60)return'Baru saja';if(s<3600)return Math.floor(s/60)+' menit lalu';if(s<86400)return Math.floor(s/3600)+' jam lalu';if(s<2592000)return Math.floor(s/86400)+' hari lalu';return new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}
+  </script>
+</Layout>
