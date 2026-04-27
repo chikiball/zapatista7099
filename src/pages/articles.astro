@@ -26,7 +26,7 @@ import Layout from "../layouts/Layout.astro";
       <div id="read-cover" class="mb-4"></div>
       <h1 id="read-title" class="text-3xl font-bold text-stone-800 mb-2"></h1>
       <div id="read-meta" class="text-sm text-stone-500 mb-6"></div>
-      <div id="read-body" class="prose text-stone-700 leading-relaxed" style="white-space:pre-wrap"></div>
+      <div id="read-body" class="prose text-stone-700 leading-relaxed" ></div>
       <div id="read-actions" class="hidden mt-6 pt-4 border-t flex gap-3">
         <button type="button" onclick="editArticle()" class="text-sm text-amber-700 hover:underline">Edit</button>
         <button type="button" onclick="deleteArticle()" class="text-sm text-red-500 hover:underline">Hapus</button>
@@ -64,13 +64,14 @@ import Layout from "../layouts/Layout.astro";
   </div>
 
   <script is:inline>
-  var isAuth=false,isApproved=false,currentId=null,editingId=null,myAlumniId=null;
+  var isAuth=false,isApproved=false,isAdmin=false,currentId=null,editingId=null,myAlumniId=null;
 
   fetch('/api/auth/me',{credentials:'include'}).then(function(r){
     if(!r.ok)return;
     r.json().then(function(d){
       isAuth=true;
       isApproved=d.user.status==='approved'||d.user.role==='admin';
+      isAdmin=d.user.role==='admin';
       myAlumniId=d.user.alumni_id;
       document.getElementById('nav-login').textContent=d.user.name||d.user.email;
       document.getElementById('nav-login').href='/profile';
@@ -129,10 +130,21 @@ import Layout from "../layouts/Layout.astro";
       if(!a)return;
       document.getElementById('read-title').textContent=a.title;
       document.getElementById('read-meta').textContent=(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'')+' &bull; '+(a.published_at?new Date(a.published_at).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}):'Draft');
-      var bodyHtml = (a.content||'').replace(/</g,'&lt;').replace(/\[foto: ([^\]]+)\]/g, '<img src="$1" class="rounded-lg my-3 max-w-full">').replace(/\n/g,'<br>');
-      document.getElementById('read-body').innerHTML=bodyHtml;
+      var bodyText = (a.content||'');
+      var safeDiv = document.createElement('div');
+      safeDiv.textContent = bodyText;
+      var safe = safeDiv.innerHTML;
+      safe = safe.replace(/\[foto:\s*([^\]]+)\]/g, function(m, url) {
+        var img = document.createElement('img');
+        img.src = url.trim();
+        img.className = 'rounded-lg my-3 max-w-full';
+        img.style.maxHeight = '500px';
+        return img.outerHTML;
+      });
+      safe = safe.replace(/\n/g, String.fromCharCode(60) + 'br' + String.fromCharCode(62));
+      document.getElementById('read-body').innerHTML = safe;
       document.getElementById('read-cover').innerHTML=a.cover_image?'<img src="/photos/'+a.cover_image+'" class="w-full rounded-xl max-h-64 object-cover">':'';
-      if(isAuth&&(a.author_id===myAlumniId||(isApproved&&isAuth)))document.getElementById('read-actions').classList.remove('hidden');
+      if(isAuth&&(a.author_id===myAlumniId||isAdmin))document.getElementById('read-actions').classList.remove('hidden');
       else document.getElementById('read-actions').classList.add('hidden');
       document.getElementById('v-list').classList.add('hidden');
       document.getElementById('v-read').classList.remove('hidden');
