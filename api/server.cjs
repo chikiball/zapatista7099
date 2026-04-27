@@ -805,6 +805,13 @@ app.delete("/api/admin/alumni/:id", adminMiddleware, (req, res) => {
   res.json({ success: true });
 });
 
+
+// Admin unlink user from alumni (wrong match)
+app.post("/api/admin/unlink/:id", adminMiddleware, (req, res) => {
+  db.prepare("UPDATE users SET alumni_id = NULL WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
 app.get("/api/admin/users", adminMiddleware, (req, res) => {
   res.json(db.prepare("SELECT u.id, u.email, u.name, u.role, u.status, u.alumni_id, u.google_id, u.created_at, a.name as alumni_name FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id ORDER BY u.created_at DESC").all());
 });

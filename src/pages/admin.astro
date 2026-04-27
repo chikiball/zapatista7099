@@ -152,11 +152,15 @@ import Layout from "../layouts/Layout.astro";
         var match=u.alumni_name?'<div class="text-xs text-green-700 mt-1">Matched: '+u.alumni_name+(u.alumni_nick?' ('+u.alumni_nick+')':'')+' - '+u.alumni_city+'</div>':'<div class="text-xs text-stone-400 mt-1">No alumni match</div>';
         var method=u.google_id?'Google':'Email';
         var ago=timeAgo(u.created_at);
-        return '<div class="bg-white rounded-xl p-4 shadow-sm mb-3"><div class="flex items-start justify-between"><div><div class="font-medium text-stone-800">'+(u.name||u.email)+'</div><div class="text-xs text-stone-500">'+u.email+' | '+method+' | '+ago+'</div>'+match+'</div><div class="flex gap-2"><button type="button" onclick="approveUser('+u.id+')" class="bg-green-600 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-700">✅ Approve</button><button type="button" onclick="rejectUser('+u.id+')" class="bg-red-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-red-600">❌ Reject</button></div></div></div>';
+        return '<div class="bg-white rounded-xl p-4 shadow-sm mb-3"><div class="flex items-start justify-between"><div><div class="font-medium text-stone-800">'+(u.name||u.email)+'</div><div class="text-xs text-stone-500">'+u.email+' | '+method+' | '+ago+'</div>'+match+'</div><div class="flex gap-2"><button type="button" onclick="approveUser('+u.id+')" class="bg-green-600 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-700">✅ Approve</button>'+(u.alumni_id?'<button type="button" onclick="unlinkUser('+u.id+')" class="bg-amber-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-amber-600">🔗 Unlink</button>':'')+'<button type="button" onclick="rejectUser('+u.id+')" class="bg-red-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-red-600">❌ Reject</button></div></div></div>';
       }).join('');
     });
   }
 
+  function unlinkUser(id){
+    if(!confirm('Unlink user from alumni match? They will get an empty profile.'))return;
+    fetch('/api/admin/unlink/'+id,{method:'POST',credentials:'include'}).then(function(){loadPending();loadDashboard()});
+  }
   function approveUser(id){fetch('/api/admin/approve/'+id,{method:'POST',credentials:'include'}).then(function(){loadPending();loadDashboard()})}
   function rejectUser(id){if(!confirm('Reject user?'))return;fetch('/api/admin/reject/'+id,{method:'POST',credentials:'include'}).then(function(){loadPending();loadDashboard()})}
 
