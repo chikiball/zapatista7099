@@ -10,8 +10,7 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </nav>
 
-  <div class="max-w-3xl mx-auto px-4 py-6">
-    <!-- Views: list / read / write -->
+  <div class="max-w-4xl mx-auto px-4 py-6">
     <div id="v-list">
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-stone-800">Cerita & Artikel</h2>
@@ -23,10 +22,11 @@ import Layout from "../layouts/Layout.astro";
 
     <div id="v-read" class="hidden">
       <button type="button" onclick="showList()" class="text-sm text-amber-700 hover:underline mb-4 inline-block">&larr; Kembali</button>
-      <div id="read-cover" class="mb-4"></div>
+      <div id="read-cover" class="mb-6"></div>
       <h1 id="read-title" class="text-3xl font-bold text-stone-800 mb-2"></h1>
       <div id="read-meta" class="text-sm text-stone-500 mb-6"></div>
-      <div id="read-body" class="prose text-stone-700 leading-relaxed" ></div>
+      <div id="read-body" class="text-stone-700 leading-relaxed"></div>
+      <div id="read-gallery" class="mt-6"></div>
       <div id="read-actions" class="hidden mt-6 pt-4 border-t flex gap-3">
         <button type="button" onclick="editArticle()" class="text-sm text-amber-700 hover:underline">Edit</button>
         <button type="button" onclick="deleteArticle()" class="text-sm text-red-500 hover:underline">Hapus</button>
@@ -47,13 +47,13 @@ import Layout from "../layouts/Layout.astro";
         </div>
         <div class="mb-4">
           <div class="flex gap-2 mb-2">
-          <label class="cursor-pointer text-xs bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg text-stone-600 transition">
-            📷 Sisipkan Foto
-            <input type="file" id="w-inline-img" accept="image/*" class="hidden" onchange="uploadInlineImage(this)">
-          </label>
-          <span id="img-upload-status" class="text-xs text-stone-400 self-center"></span>
-        </div>
-        <textarea id="w-content" rows="15" placeholder="Tulis ceritamu di sini..." class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm leading-relaxed focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+            <label class="cursor-pointer text-xs bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg text-stone-600 transition">
+              📷 Sisipkan Foto
+              <input type="file" id="w-inline-img" accept="image/*" class="hidden" onchange="uploadInlineImage(this)">
+            </label>
+            <span id="img-upload-status" class="text-xs text-stone-400 self-center"></span>
+          </div>
+          <textarea id="w-content" rows="15" placeholder="Tulis ceritamu di sini..." class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm leading-relaxed focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
         </div>
         <div class="flex gap-3">
           <button type="submit" name="action" value="published" class="bg-amber-800 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">Publish</button>
@@ -63,8 +63,18 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </div>
 
+  <!-- Lightbox -->
+  <div id="lightbox" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onclick="if(event.target===this)closeLB()">
+    <button type="button" onclick="closeLB()" class="absolute top-4 right-4 text-white text-3xl z-50">&times;</button>
+    <button type="button" onclick="lbPrev()" class="absolute left-2 top-1/2 -translate-y-1/2 text-white text-4xl z-50 p-2">&#8249;</button>
+    <button type="button" onclick="lbNext()" class="absolute right-2 top-1/2 -translate-y-1/2 text-white text-4xl z-50 p-2">&#8250;</button>
+    <img id="lb-img" class="max-w-[90vw] max-h-[85vh] object-contain rounded-lg">
+    <div id="lb-counter" class="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm"></div>
+  </div>
+
   <script is:inline>
   var isAuth=false,isApproved=false,isAdmin=false,currentId=null,editingId=null,myAlumniId=null;
+  var lbImages=[],lbIdx=0;
 
   fetch('/api/auth/me',{credentials:'include'}).then(function(r){
     if(!r.ok)return;
@@ -79,28 +89,15 @@ import Layout from "../layouts/Layout.astro";
     });
   }).catch(function(){});
 
-  
-  function uploadInlineImage(input) {
-    if (!input.files[0]) return;
-    var fd = new FormData();
-    fd.append('image', input.files[0]);
-    document.getElementById('img-upload-status').textContent = 'Uploading...';
-    fetch('/api/articles/upload-image', {method:'POST', credentials:'include', body:fd})
-      .then(function(r){return r.json()})
-      .then(function(d){
-        if (d.url) {
-          var ta = document.getElementById('w-content');
-          var pos = ta.selectionStart || ta.value.length;
-          var before = ta.value.substring(0, pos);
-          var after = ta.value.substring(pos);
-          ta.value = before + '\n[foto: ' + d.url + ']\n' + after;
-          document.getElementById('img-upload-status').textContent = '✅ Foto ditambahkan';
-        } else {
-          document.getElementById('img-upload-status').textContent = '❌ Gagal';
-        }
-        input.value = '';
-        setTimeout(function(){ document.getElementById('img-upload-status').textContent = ''; }, 2000);
-      });
+  function getPhotos(content){
+    var m,r=[],re=/\[foto:\s*([^\]]+)\]/g;
+    while(m=re.exec(content||''))r.push(m[1].trim());
+    return r;
+  }
+  function getCover(a){
+    if(a.cover_image)return '/photos/'+a.cover_image;
+    var p=getPhotos(a.content);
+    return p.length?p[0]:null;
   }
 
   loadArticles();
@@ -109,43 +106,113 @@ import Layout from "../layouts/Layout.astro";
     fetch('/api/articles').then(function(r){return r.json()}).then(function(list){
       if(!list.length){document.getElementById('empty-msg').classList.remove('hidden');document.getElementById('articles-list').innerHTML='';return}
       document.getElementById('empty-msg').classList.add('hidden');
-      document.getElementById('articles-list').innerHTML=list.map(function(a){
-        var cover=a.cover_image?'<img src="/photos/'+a.cover_image+'" class="w-24 h-24 rounded-lg object-cover flex-shrink-0">':'';
-        var preview=(a.content||'').substring(0,150).replace(/</g,'&lt;')+(a.content&&a.content.length>150?'...':'');
+      var html='';
+      list.forEach(function(a,i){
+        var cover=getCover(a);
+        var photos=getPhotos(a.content);
+        var preview=(a.content||'').replace(/\[foto:[^\]]+\]/g,'').replace(/---\nOriginal:.*$/,'').trim().substring(0,120);
         var date=a.published_at?timeAgo(a.published_at):'';
-        return '<a href="javascript:void(0)" onclick="readArticle('+a.id+')" class="block bg-white rounded-xl shadow-sm p-4 mb-4 hover:shadow-md transition"><div class="flex gap-4">'+cover+'<div class="flex-1 min-w-0"><h3 class="font-bold text-stone-800 mb-1">'+a.title+'</h3><div class="text-xs text-stone-500 mb-2">'+(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'')+' &bull; '+date+'</div><p class="text-sm text-stone-600 line-clamp-2">'+preview+'</p></div></div></a>';
-      }).join('');
+        var author=(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'');
+        var badge=photos.length>0?String.fromCharCode(60)+'span class="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full"'+String.fromCharCode(62)+'📷 '+photos.length+String.fromCharCode(60)+'/span'+String.fromCharCode(62):'';
+
+        if(i===0&&cover){
+          // Hero card - first article, full width
+          html+='<a href="javascript:void(0)" onclick="readArticle('+a.id+')" class="block bg-white rounded-xl shadow-sm mb-6 overflow-hidden hover:shadow-lg transition group">';
+          html+='<div class="relative overflow-hidden" style="max-height:300px"><img src="'+cover+'" class="w-full object-cover group-hover:scale-105 transition-transform duration-500" style="min-height:200px">'+badge+'</div>';
+          html+='<div class="p-5"><h3 class="font-bold text-xl text-stone-800 mb-1">'+a.title+'</h3>';
+          html+='<div class="text-xs text-stone-500 mb-2">'+author+' &bull; '+date+'</div>';
+          html+='<p class="text-sm text-stone-600">'+preview+'</p></div></a>';
+        }else{
+          // Grid card
+          html+='<a href="javascript:void(0)" onclick="readArticle('+a.id+')" class="block bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-lg transition group">';
+          if(cover){
+            html+='<div class="relative overflow-hidden" style="height:160px"><img src="'+cover+'" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">'+badge+'</div>';
+          }else{
+            var initial=(a.title||'?')[0].toUpperCase();
+            var colors=['#92400e','#b45309','#d97706','#a16207','#854d0e'];
+            html+='<div class="flex items-center justify-center text-4xl font-bold text-white" style="height:160px;background:'+colors[i%colors.length]+'">'+initial+'</div>';
+          }
+          html+='<div class="p-4"><h3 class="font-semibold text-stone-800 text-sm mb-1 line-clamp-2">'+a.title+'</h3>';
+          html+='<div class="text-xs text-stone-400">'+date+'</div></div></a>';
+        }
+      });
+      // Wrap non-hero cards in grid
+      var parts=html.split('</a>');
+      if(parts.length>2){
+        var hero=parts[0]+'</a>';
+        var grid=parts.slice(1,-1).map(function(p){return p+'</a>'}).join('');
+        html=hero+'<div class="grid grid-cols-2 md:grid-cols-3 gap-4">'+grid+'</div>';
+      }
+      document.getElementById('articles-list').innerHTML=html;
     });
-    // Check URL for ?id=
     var params=new URLSearchParams(window.location.search);
     if(params.get('id'))readArticle(parseInt(params.get('id')));
   }
 
   function readArticle(id){
     currentId=id;
-    fetch('/api/articles/'+id).then(function(r){
-      if(!r.ok){showList();return}
-      return r.json();
-    }).then(function(a){
+    fetch('/api/articles/'+id).then(function(r){if(!r.ok){showList();return}return r.json()}).then(function(a){
       if(!a)return;
       document.getElementById('read-title').textContent=a.title;
-      document.getElementById('read-meta').textContent=(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'')+' &bull; '+(a.published_at?new Date(a.published_at).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}):'Draft');
-      var bodyText = (a.content||'');
-      var safeDiv = document.createElement('div');
-      safeDiv.textContent = bodyText;
-      var safe = safeDiv.innerHTML;
-      safe = safe.replace(/\[foto:\s*([^\]]+)\]/g, function(m, url) {
-        var img = document.createElement('img');
-        img.src = url.trim();
-        img.className = 'rounded-lg my-3 max-w-full';
-        img.style.maxHeight = '500px';
-        return img.outerHTML;
+      document.getElementById('read-meta').innerHTML=(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'')+' &bull; '+(a.published_at?new Date(a.published_at).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}):'Draft');
+
+      // Cover
+      var cover=getCover(a);
+      if(cover){
+        var cImg=document.createElement('img');
+        cImg.src=cover;cImg.className='w-full rounded-xl max-h-80 object-cover cursor-pointer';
+        cImg.onclick=function(){openLB(allPhotos,0)};
+        document.getElementById('read-cover').innerHTML='';
+        document.getElementById('read-cover').appendChild(cImg);
+      }else{document.getElementById('read-cover').innerHTML=''}
+
+      // Body text (without [foto:] tags)
+      var bodyText=(a.content||'').replace(/\[foto:\s*[^\]]+\]/g,'');
+      var safeDiv=document.createElement('div');
+      safeDiv.textContent=bodyText;
+      var safe=safeDiv.innerHTML;
+      // Auto-link URLs
+      safe=safe.replace(/(https?:\/\/\S+)/g,function(m,url){
+        var al=document.createElement('a');al.href=url;al.textContent=url;al.target='_blank';al.className='text-amber-700 hover:underline';al.rel='noopener';return al.outerHTML;
       });
-      safe = safe.replace(/\n/g, String.fromCharCode(60) + 'br' + String.fromCharCode(62));
-      document.getElementById('read-body').innerHTML = safe;
-      document.getElementById('read-cover').innerHTML=a.cover_image?'<img src="/photos/'+a.cover_image+'" class="w-full rounded-xl max-h-64 object-cover">':'';
+      safe=safe.replace(/\n/g,String.fromCharCode(60)+'br'+String.fromCharCode(62));
+      document.getElementById('read-body').innerHTML=safe;
+
+      // Photo gallery
+      var allPhotos=getPhotos(a.content);
+      if(a.cover_image)allPhotos.unshift('/photos/'+a.cover_image);
+      var gallery=document.getElementById('read-gallery');
+      gallery.innerHTML='';
+
+      if(allPhotos.length>1){
+        // Masonry grid
+        var grid=document.createElement('div');
+        var cols=allPhotos.length<=3?2:3;
+        grid.style.cssText='columns:'+cols+';column-gap:8px';
+        allPhotos.forEach(function(url,idx){
+          var wrap=document.createElement('div');
+          wrap.style.cssText='break-inside:avoid;margin-bottom:8px;cursor:pointer;overflow:hidden;border-radius:8px';
+          var img=document.createElement('img');
+          img.src=url;img.style.cssText='width:100%;display:block;transition:transform .3s';
+          img.onmouseenter=function(){img.style.transform='scale(1.05)'};
+          img.onmouseleave=function(){img.style.transform='scale(1)'};
+          wrap.onclick=function(){openLB(allPhotos,idx)};
+          wrap.appendChild(img);
+          grid.appendChild(wrap);
+        });
+        var label=document.createElement('p');
+        label.className='text-xs text-stone-400 mt-2';
+        label.textContent='📷 '+allPhotos.length+' foto — klik untuk memperbesar';
+        gallery.appendChild(grid);
+        gallery.appendChild(label);
+      }else if(allPhotos.length===1&&!a.cover_image){
+        // Single photo already shown as cover
+      }
+
+      // Actions
       if(isAuth&&(a.author_id===myAlumniId||isAdmin))document.getElementById('read-actions').classList.remove('hidden');
       else document.getElementById('read-actions').classList.add('hidden');
+
       document.getElementById('v-list').classList.add('hidden');
       document.getElementById('v-read').classList.remove('hidden');
       document.getElementById('v-write').classList.add('hidden');
@@ -153,87 +220,95 @@ import Layout from "../layouts/Layout.astro";
     });
   }
 
+  // Lightbox
+  function openLB(images,idx){lbImages=images;lbIdx=idx;showLBImg();document.getElementById('lightbox').classList.remove('hidden')}
+  function closeLB(){document.getElementById('lightbox').classList.add('hidden')}
+  function lbNext(){lbIdx=(lbIdx+1)%lbImages.length;showLBImg()}
+  function lbPrev(){lbIdx=(lbIdx-1+lbImages.length)%lbImages.length;showLBImg()}
+  function showLBImg(){
+    document.getElementById('lb-img').src=lbImages[lbIdx];
+    document.getElementById('lb-counter').textContent=(lbIdx+1)+' / '+lbImages.length;
+  }
+  document.addEventListener('keydown',function(e){
+    if(document.getElementById('lightbox').classList.contains('hidden'))return;
+    if(e.key==='Escape')closeLB();
+    if(e.key==='ArrowRight')lbNext();
+    if(e.key==='ArrowLeft')lbPrev();
+  });
+
+  // Touch swipe for lightbox
+  var lbTouchX=0,lbTouchY=0,lbSwiped=false;
+  document.getElementById('lightbox').addEventListener('touchstart',function(e){
+    lbTouchX=e.touches[0].clientX;
+    lbTouchY=e.touches[0].clientY;
+    lbSwiped=false;
+  });
+  document.getElementById('lightbox').addEventListener('touchmove',function(e){
+    e.preventDefault();
+  },{passive:false});
+  document.getElementById('lightbox').addEventListener('touchend',function(e){
+    if(lbSwiped)return;
+    var dx=e.changedTouches[0].clientX-lbTouchX;
+    var dy=e.changedTouches[0].clientY-lbTouchY;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)){
+      lbSwiped=true;
+      if(dx>0)lbPrev();else lbNext();
+    }else if(Math.abs(dx)<10&&Math.abs(dy)<10){
+      closeLB();
+    }
+  });
+
   function showList(){
     document.getElementById('v-list').classList.remove('hidden');
     document.getElementById('v-read').classList.add('hidden');
     document.getElementById('v-write').classList.add('hidden');
     currentId=null;editingId=null;
     history.replaceState(null,'','/articles');
-    
-  function uploadInlineImage(input) {
-    if (!input.files[0]) return;
-    var fd = new FormData();
-    fd.append('image', input.files[0]);
-    document.getElementById('img-upload-status').textContent = 'Uploading...';
-    fetch('/api/articles/upload-image', {method:'POST', credentials:'include', body:fd})
-      .then(function(r){return r.json()})
-      .then(function(d){
-        if (d.url) {
-          var ta = document.getElementById('w-content');
-          var pos = ta.selectionStart || ta.value.length;
-          var before = ta.value.substring(0, pos);
-          var after = ta.value.substring(pos);
-          ta.value = before + '\n[foto: ' + d.url + ']\n' + after;
-          document.getElementById('img-upload-status').textContent = '✅ Foto ditambahkan';
-        } else {
-          document.getElementById('img-upload-status').textContent = '❌ Gagal';
-        }
-        input.value = '';
-        setTimeout(function(){ document.getElementById('img-upload-status').textContent = ''; }, 2000);
-      });
+    loadArticles();
   }
-
-  loadArticles();
-  }
-
   function showWrite(){
     editingId=null;
     document.getElementById('write-title-h').textContent='Tulis Artikel';
-    document.getElementById('w-title').value='';
-    document.getElementById('w-content').value='';
-    document.getElementById('v-list').classList.add('hidden');
-    document.getElementById('v-read').classList.add('hidden');
+    document.getElementById('w-title').value='';document.getElementById('w-content').value='';
+    document.getElementById('v-list').classList.add('hidden');document.getElementById('v-read').classList.add('hidden');
     document.getElementById('v-write').classList.remove('hidden');
   }
-
   function editArticle(){
     editingId=currentId;
     fetch('/api/articles/'+currentId,{credentials:'include'}).then(function(r){return r.json()}).then(function(a){
       document.getElementById('write-title-h').textContent='Edit Artikel';
-      document.getElementById('w-title').value=a.title||'';
-      document.getElementById('w-content').value=a.content||'';
-      document.getElementById('v-list').classList.add('hidden');
-      document.getElementById('v-read').classList.add('hidden');
+      document.getElementById('w-title').value=a.title||'';document.getElementById('w-content').value=a.content||'';
+      document.getElementById('v-list').classList.add('hidden');document.getElementById('v-read').classList.add('hidden');
       document.getElementById('v-write').classList.remove('hidden');
     });
   }
-
   function saveArticle(e){
     e.preventDefault();
     var action=e.submitter?e.submitter.value:'draft';
-    var title=document.getElementById('w-title').value;
-    var content=document.getElementById('w-content').value;
+    var title=document.getElementById('w-title').value,content=document.getElementById('w-content').value;
     var url=editingId?'/api/articles/'+editingId:'/api/articles';
-    var method=editingId?'PUT':'POST';
-
-    fetch(url,{method:method,headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({title:title,content:content,status:action})})
+    fetch(url,{method:editingId?'PUT':'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({title:title,content:content,status:action})})
     .then(function(r){return r.json()}).then(function(d){
       if(d.error){var m=document.getElementById('write-msg');m.textContent=d.error;m.className='text-sm mb-3 text-red-700';return}
       var artId=editingId||d.id;
-      // Upload cover if selected
       var coverFile=document.getElementById('w-cover').files[0];
-      if(coverFile){
-        var fd=new FormData();fd.append('cover',coverFile);
-        fetch('/api/articles/'+artId+'/cover',{method:'POST',credentials:'include',body:fd}).then(function(){
-          showList();
-        });
-      }else{showList()}
+      if(coverFile){var fd=new FormData();fd.append('cover',coverFile);fetch('/api/articles/'+artId+'/cover',{method:'POST',credentials:'include',body:fd}).then(function(){showList()});}
+      else{showList()}
     });
   }
+  function deleteArticle(){if(!confirm('Hapus artikel ini?'))return;fetch('/api/articles/'+currentId,{method:'DELETE',credentials:'include'}).then(function(){showList()})}
 
-  function deleteArticle(){
-    if(!confirm('Hapus artikel ini?'))return;
-    fetch('/api/articles/'+currentId,{method:'DELETE',credentials:'include'}).then(function(){showList()});
+  function uploadInlineImage(input){
+    if(!input.files[0])return;
+    var fd=new FormData();fd.append('image',input.files[0]);
+    document.getElementById('img-upload-status').textContent='Uploading...';
+    fetch('/api/articles/upload-image',{method:'POST',credentials:'include',body:fd})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.url){var ta=document.getElementById('w-content');var pos=ta.selectionStart||ta.value.length;ta.value=ta.value.substring(0,pos)+'\n[foto: '+d.url+']\n'+ta.value.substring(pos);
+          document.getElementById('img-upload-status').textContent='✅ Foto ditambahkan';
+        }else{document.getElementById('img-upload-status').textContent='❌ Gagal'}
+        input.value='';setTimeout(function(){document.getElementById('img-upload-status').textContent=''},2000);
+      });
   }
 
   function timeAgo(d){if(!d)return'';var s=Math.floor((Date.now()-new Date(d).getTime())/1000);if(s<60)return'Baru saja';if(s<3600)return Math.floor(s/60)+' menit lalu';if(s<86400)return Math.floor(s/3600)+' jam lalu';if(s<2592000)return Math.floor(s/86400)+' hari lalu';return new Date(d).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}

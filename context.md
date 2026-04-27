@@ -1,7 +1,7 @@
 # 7099 Project Context — For AI Assistants
 
 > Load this file at the start of a new conversation to resume work.
-> Last updated: 2026-04-25
+> Last updated: 2026-04-27
 
 ## What Is This
 
@@ -16,6 +16,7 @@ Browser → https://zapa.inweb.id
   → Proxmox/OpenResty (SSL, port 443→80)
     → Nginx on Debian 12 (port 80)
       ├── Static: /var/www/alumni/dist/ (Astro build)
+      ├── /photos/ → symlink to /var/www/alumni/public/photos/
       └── /api/* → proxy_pass localhost:3000
             → Node.js Express API (PM2: alumni-api)
               → SQLite: /var/www/alumni/api/alumni.db
@@ -25,77 +26,41 @@ Browser → https://zapa.inweb.id
 
 - **Astro v6** + **Tailwind CSS v4** (static site, 9 pages)
 - **Express.js** API (`api/server.cjs` — CommonJS)
-- **SQLite** via `better-sqlite3`
-- **D3.js v7** + **TopoJSON** + **Canvas** for globe map
-- **Chart.js** for statistics
-- **JWT** auth (HttpOnly cookies) + **Google Sign-In**
-- **nodemailer** for SMTP emails
-- **multer** for file uploads + **sharp** for image resizing
-- **PM2** process manager, **Node.js v22**
+- **SQLite** via `better-sqlite3`, **D3.js** + **Canvas** globe, **Chart.js** stats
+- **JWT** auth + **Google Sign-In**, **nodemailer** SMTP, **multer** + **sharp** uploads
+- **PM2**, **Node.js v22**
 
-## Database Schema
+## Pages (9)
 
-```sql
-CREATE TABLE alumni (id, name, nickname, email, phone, city, country,
-  latitude, longitude, university, degree, job_title, company, industry,
-  bio, photo_url, is_public, created_at, google_id,
-  birthday, gender, address, hobby, class);
+| Page | URL | Auth |
+|------|-----|------|
+| Homepage | `/` | Public |
+| Login | `/login` | Public |
+| Reset | `/reset` | Public |
+| Profile | `/profile` | Approved |
+| Map | `/map` | Public (details: approved) |
+| Stats | `/stats` | Public |
+| Directory | `/directory` | Approved |
+| Articles | `/articles` | Public (write: approved) |
+| Admin | `/admin` | Admin only |
 
-CREATE TABLE users (id, email, password_hash, google_id, name,
-  alumni_id REFERENCES alumni(id), role DEFAULT 'user',
-  status DEFAULT 'pending', reset_token, reset_expires, created_at);
+## Key Systems
 
-CREATE TABLE photos (id, alumni_id, filename, original_name, created_at);
-CREATE TABLE articles (id, author_id, title, content, cover_image,
-  published_at, status DEFAULT 'draft', created_at, updated_at);
-CREATE TABLE events (id, title, description, event_date, location, rsvp_count);
-CREATE TABLE config (key PRIMARY KEY, value); -- telegram + smtp settings
-```
+- **Auth:** JWT cookies, Google OAuth, approval system (pending/approved/rejected)
+- **Admin:** Dashboard, approval queue with unlink button, alumni/user management, settings
+- **Telegram:** Bot notifies group on new registration
+- **Email:** Welcome, approval, rejection, password reset (SMTP: dr6101.inweb.id)
+- **Map:** D3 orthographic globe, neon pins, dynamic clustering, starburst cards, city labels
+- **Stats:** 12 sections with scroll animations, normalized jobs/industries/universities
+- **Articles:** Magazine layout, masonry photo gallery, lightbox with swipe, inline image upload (sharp resize), auto-link URLs, [foto:] tag system
+- **Photos:** Symlink dist/photos → public/photos (survives builds), sharp auto-resize max 800px
 
-## Pages (9 total)
+## Important Notes
 
-| Page | URL | Auth | Description |
-|------|-----|------|-------------|
-| Homepage | `/` | Public | Hero with Zapa logo, dynamic stats, feature cards, mobile menu |
-| Login | `/login` | Public | Google + email signup/login, forgot password link |
-| Reset | `/reset` | Public | Password reset form (token from email) |
-| Profile | `/profile` | Approved | Edit all fields, photo upload, class dropdown |
-| Map | `/map` | Public (details: approved) | D3 canvas globe, neon pins, starburst cards, dynamic clustering |
-| Stats | `/stats` | Public | 12 chart sections, scroll animations, Chart.js |
-| Directory | `/directory` | Approved | Searchable card grid, filter by class/city |
-| Articles | `/articles` | Public (write: approved) | Article list, read, write/edit with inline image upload |
-| Admin | `/admin` | Admin only | Dashboard, approval queue, alumni/user management, settings |
-
-## Auth & Approval System
-
-- **3 middlewares:** `authMiddleware`, `approvedMiddleware`, `adminMiddleware`
-- **Signup flow:** New user → status='pending' → admin approves → status='approved'
-- **Admin account:** bengek70@gmail.com
-- **Google OAuth Client ID:** 1035245406806-...
-
-## Notifications
-
-- **Telegram:** Bot notifies group on new registration. Token + chat_id in config table.
-- **Email (SMTP):** dr6101.inweb.id:587, zapa@inweb.id. Welcome, approval, rejection, password reset emails.
-- Both configurable in admin Settings tab with test buttons.
-
-## Articles System
-
-- 36 articles imported from Instagram (@zapatista7099)
-- Public can read published articles
-- Approved users can write/edit own articles
-- Inline image upload with auto-resize (sharp, max 800px, JPEG 80%)
-- Cover image upload with auto-resize
-- `[foto: /photos/xxx.jpg]` syntax in content renders as inline images
-- Author or admin can edit/delete any article
-
-## Key Features
-
-- **Globe Map:** D3 orthographic canvas, neon green pins, dynamic clustering, starburst cards with drift, touch/hover separation via @media(hover:hover)
-- **Statistics:** IPA vs IPS, class ranking, zodiac, birthdays, city/job/university bars, hobby cloud, progress ring, scroll animations
-- **Directory:** Login-gated searchable card grid with class/city filters
-- **Profile:** Auto-match alumni on signup, all fields including class/photo/university
-- **Branding:** Zapa logos (nav + hero), brown/#b39c82 gradient theme
+- `dist/photos` is a **symlink** to `public/photos` — must be recreated after each build
+- Astro escapes `<>` in `<script is:inline>` — use `document.createElement()` or `String.fromCharCode()` to build HTML tags in JS
+- API file is `.cjs` (CommonJS) because Astro sets `type:module`
+- `'99` in JS strings causes syntax errors — use `\x2799`
 
 ## Deploy
 
@@ -105,6 +70,7 @@ cd /var/www/alumni
 sudo chown -R zapa:zapa dist/ .astro/
 npm run build
 sudo chown -R www-data:www-data dist/
+sudo rm -rf dist/photos && sudo ln -sf /var/www/alumni/public/photos dist/photos
 sudo systemctl reload nginx
 pm2 restart alumni-api  # if API changed
 ```
@@ -112,9 +78,6 @@ pm2 restart alumni-api  # if API changed
 ## What's NOT Built Yet
 
 - Events/RSVP (DB table exists, no UI)
-- Photo Gallery (photos only on individual profiles)
+- Photo Gallery from yearbook (243 portraits extracted, not uploaded)
 - Memorial Page
 - Auto-Geocoding for new cities
-- Admin CSV import, merge duplicates, normalize cities
-- Pending user banner on pages
-- WhatsApp integration
