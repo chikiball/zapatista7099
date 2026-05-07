@@ -106,6 +106,19 @@ function sendEmail(to, subject, html) {
   } catch(e) { console.error("Email error:", e); }
 }
 
+async function geocodeCity(city, country) {
+  if (!city) return null;
+  const q = [city, country].filter(Boolean).join(", ");
+  try {
+    const r = await fetch("https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(q) + "&format=json&limit=1", {
+      headers: { "User-Agent": "alumni7099/1.0 (zapa.inweb.id)" }
+    });
+    const d = await r.json();
+    if (d && d[0]) return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) };
+  } catch(e) { console.error("Geocode error:", e.message); }
+  return null;
+}
+
 function emailTemplate(title, body, btnText, btnUrl) {
   return '<div style="max-width:500px;margin:0 auto;font-family:sans-serif;background:#faf8f4;padding:30px 20px">' +
     '<div style="text-align:center;margin-bottom:20px"><b style="color:#92400e;font-size:20px">Alumni SMU 70 \x2799</b></div>' +
@@ -353,27 +366,36 @@ app.get("/api/profile", authMiddleware, (req, res) => {
 });
 
 // Update or create profile
-app.put("/api/profile", approvedMiddleware, (req, res) => {
+app.put("/api/profile", approvedMiddleware, async (req, res) => {
   try {
     const { name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, class: kelas } = req.body;
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
 
     if (user.alumni_id) {
-      // Update existing alumni record
+      const existing = db.prepare("SELECT city, latitude FROM alumni WHERE id = ?").get(user.alumni_id);
       db.prepare(`
         UPDATE alumni SET name=?, nickname=?, phone=?, city=?, country=?, job_title=?, company=?, bio=?, birthday=?, gender=?, address=?, hobby=?, university=?, class=?
         WHERE id=?
       `).run(name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas, user.alumni_id);
+      if (city && (!existing.latitude || existing.city !== city)) {
+        geocodeCity(city, country).then(c => {
+          if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, user.alumni_id);
+        }).catch(() => {});
+      }
     } else {
-      // Create new alumni record and link
       const result = db.prepare(`
         INSERT INTO alumni (name, nickname, email, phone, city, country, job_title, company, bio, is_public, birthday, gender, address, hobby, university, class)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
       `).run(name, nickname, user.email, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas);
       db.prepare("UPDATE users SET alumni_id = ?, name = ? WHERE id = ?").run(result.lastInsertRowid, name, user.id);
+      if (city) {
+        const newId = result.lastInsertRowid;
+        geocodeCity(city, country).then(c => {
+          if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, newId);
+        }).catch(() => {});
+      }
     }
 
-    // Update user name
     db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, user.id);
 
     const profile = user.alumni_id
@@ -769,11 +791,21 @@ app.get("/api/admin/pending", adminMiddleware, (req, res) => {
 
 app.post("/api/admin/approve/:id", adminMiddleware, (req, res) => {
   db.prepare("UPDATE users SET status = 'approved' WHERE id = ?").run(req.params.id);
-  var u = db.prepare("SELECT email, name FROM users WHERE id = ?").get(req.params.id);
-  if (u) sendEmail(u.email, "Akun Disetujui - Alumni 7099",
-    emailTemplate("Akun Kamu Disetujui! ✅",
-      "Halo " + (u.name || "Alumni") + ",<br><br>Selamat! Akun kamu telah <b>disetujui</b> oleh admin. Kamu sekarang bisa mengakses semua fitur website alumni termasuk:<br><br>• Direktori alumni<br>• Peta interaktif<br>• Edit profil<br>• Upload foto",
-      "Masuk Sekarang", "https://zapa.inweb.id/login"));
+  var u = db.prepare("SELECT email, name, alumni_id FROM users WHERE id = ?").get(req.params.id);
+  if (u) {
+    sendEmail(u.email, "Akun Disetujui - Alumni 7099",
+      emailTemplate("Akun Kamu Disetujui! ✅",
+        "Halo " + (u.name || "Alumni") + ",<br><br>Selamat! Akun kamu telah <b>disetujui</b> oleh admin. Kamu sekarang bisa mengakses semua fitur website alumni termasuk:<br><br>• Direktori alumni<br>• Peta interaktif<br>• Edit profil<br>• Upload foto",
+        "Masuk Sekarang", "https://zapa.inweb.id/login"));
+    if (u.alumni_id) {
+      var a = db.prepare("SELECT id, city, country, latitude FROM alumni WHERE id = ?").get(u.alumni_id);
+      if (a && a.city && !a.latitude) {
+        geocodeCity(a.city, a.country).then(c => {
+          if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, a.id);
+        }).catch(() => {});
+      }
+    }
+  }
   res.json({ success: true });
 });
 
