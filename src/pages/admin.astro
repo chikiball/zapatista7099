@@ -23,6 +23,7 @@ import Layout from "../layouts/Layout.astro";
       <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="users" onclick="showTab('users')">Users</button>
       <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="settings" onclick="showTab('settings')">⚙️ Settings</button>
       <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="events" onclick="showTab('events')">📅 Events</button>
+      <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="articles" onclick="showTab('articles')">📝 Articles</button>
     </div>
 
     <!-- Dashboard -->
@@ -113,6 +114,14 @@ import Layout from "../layouts/Layout.astro";
       <div id="ev-list"></div>
     </div>
 
+    <!-- Articles -->
+    <div id="tab-articles" class="hidden p-4 max-w-5xl mx-auto">
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="bg-stone-100 text-left"><th class="p-2">Judul</th><th class="p-2">Penulis</th><th class="p-2">Status</th><th class="p-2">Tanggal</th><th class="p-2 w-16"></th></tr></thead>
+        <tbody id="art-body"></tbody>
+      </table></div>
+    </div>
+
     <!-- Edit Modal -->
     <div id="modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
@@ -141,7 +150,7 @@ import Layout from "../layouts/Layout.astro";
   </div>
 
   <script is:inline>
-  var alumniData=[],usersData=[],eventsData=[],evEditId=null;
+  var alumniData=[],usersData=[],eventsData=[],evEditId=null,articlesData=[];
 
   fetch('/api/auth/me',{credentials:'include'}).then(function(r){
     if(!r.ok){document.getElementById('loading').classList.add('hidden');document.getElementById('denied').classList.remove('hidden');return}
@@ -157,11 +166,12 @@ import Layout from "../layouts/Layout.astro";
     document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('border-b-2','border-amber-700','text-amber-900');b.classList.add('text-stone-500')});
     document.querySelector('[data-tab="'+t+'"]').classList.add('border-b-2','border-amber-700','text-amber-900');
     document.querySelector('[data-tab="'+t+'"]').classList.remove('text-stone-500');
-    ['dash','pending','alumni','users','settings','events'].forEach(function(x){document.getElementById('tab-'+x).classList.toggle('hidden',x!==t)});
+    ['dash','pending','alumni','users','settings','events','articles'].forEach(function(x){document.getElementById('tab-'+x).classList.toggle('hidden',x!==t)});
     if(t==='alumni'&&!alumniData.length)loadAlumni();
     if(t==='users'&&!usersData.length)loadUsers();
     if(t==='settings')loadConfig();
     if(t==='events')loadAdminEvents();
+    if(t==='articles')loadAdminArticles();
   }
 
   function loadDashboard(){
@@ -284,7 +294,7 @@ import Layout from "../layouts/Layout.astro";
         var d=ev.event_date?new Date(ev.event_date).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
         return '<div class="bg-white rounded-xl p-4 shadow-sm mb-3 flex items-center justify-between gap-4">'+
           '<div class="flex-1 min-w-0"><div class="font-medium text-stone-800 truncate">'+ev.title+'</div>'+
-          '<div class="text-xs text-stone-400 mt-0.5">'+d+(ev.location?' &middot; '+ev.location:'')+'</div></div>'+
+          '<div class="text-xs text-stone-400 mt-0.5">'+d+(ev.location?' &middot; '+ev.location:'')+(ev.created_by_name?' &middot; oleh '+ev.created_by_name:'')+'</div></div>'+
           '<div class="flex items-center gap-3 shrink-0">'+
           '<button type="button" onclick="viewRsvps('+ev.id+',\''+ev.title.replace(/'/g,"\\'")+'\')" class="text-xs text-stone-500 hover:text-amber-700">&#128101; '+ev.rsvp_count+'</button>'+
           '<button type="button" onclick="openEventForm('+ev.id+')" class="text-xs text-amber-700 hover:underline">Edit</button>'+
@@ -323,6 +333,25 @@ import Layout from "../layouts/Layout.astro";
       document.getElementById('rsvp-modal').classList.remove('hidden');
     });
   }
+
+  function loadAdminArticles(){
+    fetch('/api/admin/articles',{credentials:'include'}).then(function(r){return r.json()}).then(function(list){
+      articlesData=list;
+      document.getElementById('art-body').innerHTML=list.length?list.map(function(a){
+        var sc=a.status==='published'?'bg-green-100 text-green-700':'bg-amber-100 text-amber-700';
+        var d=new Date(a.published_at||a.created_at).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+        var author=a.author_nick?a.author_nick+' ('+a.author_name+')':a.author_name||'-';
+        return '<tr class="border-b hover:bg-stone-50">'+
+          '<td class="p-2 max-w-xs"><div class="truncate font-medium">'+a.title+'</div></td>'+
+          '<td class="p-2 text-xs text-stone-500">'+author+'</td>'+
+          '<td class="p-2"><span class="text-xs px-2 py-0.5 rounded-full font-medium '+sc+'">'+a.status+'</span></td>'+
+          '<td class="p-2 text-xs text-stone-400">'+d+'</td>'+
+          '<td class="p-2"><button type="button" onclick="delAdminArticle('+a.id+')" class="text-red-500 text-xs hover:underline">Del</button></td>'+
+          '</tr>';
+      }).join(''):'<tr><td colspan="5" class="p-4 text-center text-stone-400 text-sm">Tidak ada artikel.</td></tr>';
+    });
+  }
+  function delAdminArticle(id){if(!confirm('Hapus artikel ini?'))return;fetch('/api/admin/articles/'+id,{method:'DELETE',credentials:'include'}).then(function(){loadAdminArticles()})}
 
   function timeAgo(d){if(!d)return'';var s=Math.floor((Date.now()-new Date(d+'Z').getTime())/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
   function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(function(){window.location.href='/login'})}

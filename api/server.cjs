@@ -843,7 +843,7 @@ app.get("/api/events", (req, res) => {
       if (u && u.status === "approved" && u.alumni_id) alumniId = u.alumni_id;
     }
   } catch(e) {}
-  const events = db.prepare("SELECT * FROM events ORDER BY event_date ASC").all();
+  const events = db.prepare("SELECT e.*, u.name as created_by_name FROM events e LEFT JOIN users u ON u.id = e.created_by ORDER BY e.event_date ASC").all();
   let userId = null;
   try {
     const token = req.cookies.token;
@@ -952,6 +952,15 @@ app.post("/api/admin/reject/:id", adminMiddleware, (req, res) => {
     emailTemplate("Pendaftaran Ditolak",
       "Halo " + (u.name || "") + ",<br><br>Maaf, pendaftaran akun kamu <b>tidak disetujui</b> oleh admin.<br><br>Jika kamu merasa ini adalah kesalahan, silakan hubungi admin di grup alumni.",
       null, null));
+  res.json({ success: true });
+});
+
+app.get("/api/admin/articles", adminMiddleware, (req, res) => {
+  res.json(db.prepare("SELECT a.*, al.name as author_name, al.nickname as author_nick FROM articles a LEFT JOIN alumni al ON a.author_id = al.id ORDER BY a.created_at DESC").all());
+});
+
+app.delete("/api/admin/articles/:id", adminMiddleware, (req, res) => {
+  db.prepare("DELETE FROM articles WHERE id=?").run(req.params.id);
   res.json({ success: true });
 });
 
