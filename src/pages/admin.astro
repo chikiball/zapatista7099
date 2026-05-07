@@ -22,6 +22,7 @@ import Layout from "../layouts/Layout.astro";
       <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="alumni" onclick="showTab('alumni')">Alumni</button>
       <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="users" onclick="showTab('users')">Users</button>
       <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="settings" onclick="showTab('settings')">⚙️ Settings</button>
+      <button type="button" class="tab px-4 py-3 text-stone-500" data-tab="events" onclick="showTab('events')">📅 Events</button>
     </div>
 
     <!-- Dashboard -->
@@ -91,6 +92,27 @@ import Layout from "../layouts/Layout.astro";
       </div>
     </div>
 
+    <!-- Events -->
+    <div id="tab-events" class="hidden p-4 max-w-3xl mx-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold">Events</h3>
+        <button type="button" onclick="openEventForm(null)" class="bg-amber-800 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-amber-900">+ Event Baru</button>
+      </div>
+      <div id="ev-form" class="hidden bg-white rounded-xl p-4 shadow-sm mb-4">
+        <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+          <div><label class="block text-xs text-stone-500 mb-1">Judul</label><input id="ev-title" class="w-full border rounded px-2 py-1.5 text-sm"></div>
+          <div><label class="block text-xs text-stone-500 mb-1">Tanggal &amp; Waktu</label><input type="datetime-local" id="ev-date" class="w-full border rounded px-2 py-1.5 text-sm"></div>
+          <div><label class="block text-xs text-stone-500 mb-1">Lokasi</label><input id="ev-location" class="w-full border rounded px-2 py-1.5 text-sm"></div>
+          <div><label class="block text-xs text-stone-500 mb-1">Deskripsi</label><input id="ev-desc" class="w-full border rounded px-2 py-1.5 text-sm"></div>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" onclick="saveEvent()" class="bg-amber-800 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-amber-900">Simpan</button>
+          <button type="button" onclick="document.getElementById('ev-form').classList.add('hidden')" class="border px-4 py-1.5 rounded-lg text-sm">Batal</button>
+        </div>
+      </div>
+      <div id="ev-list"></div>
+    </div>
+
     <!-- Edit Modal -->
     <div id="modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
@@ -106,8 +128,20 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </div>
 
+    <!-- RSVP Modal -->
+    <div id="rsvp-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-lg" id="rsvp-modal-title">RSVP</h3>
+          <button type="button" onclick="document.getElementById('rsvp-modal').classList.add('hidden')" class="text-stone-400 hover:text-stone-600 text-xl leading-none">&times;</button>
+        </div>
+        <div id="rsvp-modal-body"></div>
+      </div>
+    </div>
+  </div>
+
   <script is:inline>
-  var alumniData=[],usersData=[];
+  var alumniData=[],usersData=[],eventsData=[],evEditId=null;
 
   fetch('/api/auth/me',{credentials:'include'}).then(function(r){
     if(!r.ok){document.getElementById('loading').classList.add('hidden');document.getElementById('denied').classList.remove('hidden');return}
@@ -123,10 +157,11 @@ import Layout from "../layouts/Layout.astro";
     document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('border-b-2','border-amber-700','text-amber-900');b.classList.add('text-stone-500')});
     document.querySelector('[data-tab="'+t+'"]').classList.add('border-b-2','border-amber-700','text-amber-900');
     document.querySelector('[data-tab="'+t+'"]').classList.remove('text-stone-500');
-    ['dash','pending','alumni','users','settings'].forEach(function(x){document.getElementById('tab-'+x).classList.toggle('hidden',x!==t)});
+    ['dash','pending','alumni','users','settings','events'].forEach(function(x){document.getElementById('tab-'+x).classList.toggle('hidden',x!==t)});
     if(t==='alumni'&&!alumniData.length)loadAlumni();
     if(t==='users'&&!usersData.length)loadUsers();
     if(t==='settings')loadConfig();
+    if(t==='events')loadAdminEvents();
   }
 
   function loadDashboard(){
@@ -242,6 +277,53 @@ import Layout from "../layouts/Layout.astro";
       var m=document.getElementById('cfg-msg');m.textContent='📨 Test message sent!';m.className='text-sm text-amber-700';setTimeout(function(){m.className='text-sm hidden'},3000);
     });
   }
+  function loadAdminEvents(){
+    fetch('/api/events',{credentials:'include'}).then(function(r){return r.json()}).then(function(list){
+      eventsData=list;
+      document.getElementById('ev-list').innerHTML=list.length?list.map(function(ev){
+        var d=ev.event_date?new Date(ev.event_date).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
+        return '<div class="bg-white rounded-xl p-4 shadow-sm mb-3 flex items-center justify-between gap-4">'+
+          '<div class="flex-1 min-w-0"><div class="font-medium text-stone-800 truncate">'+ev.title+'</div>'+
+          '<div class="text-xs text-stone-400 mt-0.5">'+d+(ev.location?' &middot; '+ev.location:'')+'</div></div>'+
+          '<div class="flex items-center gap-3 shrink-0">'+
+          '<button type="button" onclick="viewRsvps('+ev.id+',\''+ev.title.replace(/'/g,"\\'")+'\')" class="text-xs text-stone-500 hover:text-amber-700">&#128101; '+ev.rsvp_count+'</button>'+
+          '<button type="button" onclick="openEventForm('+ev.id+')" class="text-xs text-amber-700 hover:underline">Edit</button>'+
+          '<button type="button" onclick="delEvent('+ev.id+')" class="text-xs text-red-500 hover:underline">Del</button>'+
+          '</div></div>';
+      }).join(''):'<p class="text-stone-400 text-sm text-center py-8">Belum ada event.</p>';
+    });
+  }
+  function openEventForm(id){
+    var ev=id?eventsData.find(function(e){return e.id===id}):null;
+    evEditId=id||null;
+    document.getElementById('ev-title').value=ev?ev.title:'';
+    document.getElementById('ev-date').value=ev&&ev.event_date?ev.event_date.slice(0,16):'';
+    document.getElementById('ev-location').value=ev?ev.location||'':'';
+    document.getElementById('ev-desc').value=ev?ev.description||'':'';
+    document.getElementById('ev-form').classList.remove('hidden');
+    document.getElementById('ev-title').focus();
+  }
+  function saveEvent(){
+    var body={title:document.getElementById('ev-title').value,event_date:document.getElementById('ev-date').value,location:document.getElementById('ev-location').value,description:document.getElementById('ev-desc').value};
+    var url=evEditId?'/api/events/'+evEditId:'/api/events';
+    fetch(url,{method:evEditId?'PUT':'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)}).then(function(){
+      document.getElementById('ev-form').classList.add('hidden');
+      loadAdminEvents();
+    });
+  }
+  function delEvent(id){if(!confirm('Hapus event ini?'))return;fetch('/api/events/'+id,{method:'DELETE',credentials:'include'}).then(function(){loadAdminEvents()})}
+  function viewRsvps(id,title){
+    fetch('/api/events/'+id+'/rsvps',{credentials:'include'}).then(function(r){return r.json()}).then(function(list){
+      document.getElementById('rsvp-modal-title').textContent='RSVP: '+title;
+      document.getElementById('rsvp-modal-body').innerHTML=list.length?
+        '<table class="w-full text-sm"><thead><tr class="text-left text-stone-400 border-b"><th class="pb-2">Nama</th><th class="pb-2">Panggilan</th><th class="pb-2">Kota</th></tr></thead><tbody>'+
+        list.map(function(r){return '<tr class="border-b"><td class="py-2">'+r.name+'</td><td class="py-2 text-stone-500">'+(r.nickname||'-')+'</td><td class="py-2 text-stone-500">'+(r.city||'-')+'</td></tr>'}).join('')+
+        '</tbody></table>':
+        '<p class="text-stone-400 text-sm text-center py-4">Belum ada yang RSVP.</p>';
+      document.getElementById('rsvp-modal').classList.remove('hidden');
+    });
+  }
+
   function timeAgo(d){if(!d)return'';var s=Math.floor((Date.now()-new Date(d+'Z').getTime())/1000);if(s<60)return s+'s ago';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago'}
   function logout(){fetch('/api/auth/logout',{method:'POST',credentials:'include'}).then(function(){window.location.href='/login'})}
   </script>

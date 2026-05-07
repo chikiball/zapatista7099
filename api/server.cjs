@@ -65,6 +65,9 @@ db.exec("CREATE TABLE IF NOT EXISTS photos (id INTEGER PRIMARY KEY AUTOINCREMENT
 
 // Config table
 db.exec("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)");
+db.exec("CREATE TABLE IF NOT EXISTS event_rsvp (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER REFERENCES events(id) ON DELETE CASCADE, alumni_id INTEGER REFERENCES alumni(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(event_id, alumni_id))");
+try { db.exec("ALTER TABLE events ADD COLUMN created_by INTEGER REFERENCES users(id)"); } catch(e) {}
+try { db.exec("ALTER TABLE events ADD COLUMN cover_image TEXT"); } catch(e) {}
 
 // Telegram notification
 function sendTelegram(text) {
@@ -787,6 +790,96 @@ app.get("/api/admin/dashboard", adminMiddleware, (req, res) => {
 app.get("/api/admin/pending", adminMiddleware, (req, res) => {
   const users = db.prepare("SELECT u.id, u.email, u.name, u.google_id, u.alumni_id, u.status, u.created_at, a.name as alumni_name, a.nickname as alumni_nick, a.city as alumni_city FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id WHERE u.status = 'pending' ORDER BY u.created_at DESC").all();
   res.json(users);
+});
+
+// ── Events ──────────────────────────────────────────
+app.get("/api/events", (req, res) => {
+  let alumniId = null;
+  try {
+    const token = req.cookies.token;
+    if (token) {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      const u = db.prepare("SELECT alumni_id, status FROM users WHERE id = ?").get(decoded.id);
+      if (u && u.status === "approved" && u.alumni_id) alumniId = u.alumni_id;
+    }
+  } catch(e) {}
+  const events = db.prepare("SELECT * FROM events ORDER BY event_date ASC").all();
+  let userId = null;
+  try {
+    const token = req.cookies.token;
+    if (token) { const decoded = jwt.verify(token, JWT_SECRET); userId = decoded.id; }
+  } catch(e) {}
+  res.json(events.map(ev => Object.assign({}, ev, {
+    rsvped: alumniId ? !!db.prepare("SELECT 1 FROM event_rsvp WHERE event_id=? AND alumni_id=?").get(ev.id, alumniId) : false,
+    can_edit: userId ? (ev.created_by === userId || !!db.prepare("SELECT 1 FROM users WHERE id=? AND role='admin'").get(userId)) : false
+  })));
+});
+
+app.post("/api/events", approvedMiddleware, (req, res) => {
+  const { title, description, event_date, location } = req.body;
+  const r = db.prepare("INSERT INTO events (title, description, event_date, location, rsvp_count, created_by) VALUES (?,?,?,?,0,?)").run(title, description, event_date, location, req.user.id);
+  res.json({ success: true, id: r.lastInsertRowid });
+});
+
+app.put("/api/events/:id", approvedMiddleware, (req, res) => {
+  const ev = db.prepare("SELECT created_by FROM events WHERE id=?").get(req.params.id);
+  if (!ev) return res.status(404).json({ error: "Not found" });
+  const user = db.prepare("SELECT role FROM users WHERE id=?").get(req.user.id);
+  if (ev.created_by !== req.user.id && user.role !== "admin") return res.status(403).json({ error: "Forbidden" });
+  const { title, description, event_date, location } = req.body;
+  db.prepare("UPDATE events SET title=?, description=?, event_date=?, location=? WHERE id=?").run(title, description, event_date, location, req.params.id);
+  res.json({ success: true });
+});
+
+app.delete("/api/events/:id", adminMiddleware, (req, res) => {
+  db.prepare("DELETE FROM event_rsvp WHERE event_id=?").run(req.params.id);
+  db.prepare("DELETE FROM events WHERE id=?").run(req.params.id);
+  res.json({ success: true });
+});
+
+app.post("/api/events/upload-image", approvedMiddleware, upload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file" });
+    var outName = "ev-" + Date.now() + "-" + Math.random().toString(36).substr(2,6) + ".jpg";
+    var outPath = path.join(__dirname, "..", "public", "photos", outName);
+    await sharp(req.file.path).resize(800, null, { withoutEnlargement: true, fit: "inside" }).jpeg({ quality: 80 }).toFile(outPath);
+    try { fs.unlinkSync(req.file.path); } catch(e) {}
+    res.json({ success: true, url: "/photos/" + outName });
+  } catch(e) { res.status(500).json({ error: "Upload failed" }); }
+});
+
+app.post("/api/events/:id/cover", approvedMiddleware, upload.single("cover"), async (req, res) => {
+  const ev = db.prepare("SELECT created_by FROM events WHERE id=?").get(req.params.id);
+  if (!ev) return res.status(404).json({ error: "Not found" });
+  const user = db.prepare("SELECT role FROM users WHERE id=?").get(req.user.id);
+  if (ev.created_by !== req.user.id && user.role !== "admin") return res.status(403).json({ error: "Forbidden" });
+  try {
+    var outName = "ev-cover-" + Date.now() + ".jpg";
+    var outPath = path.join(__dirname, "..", "public", "photos", outName);
+    await sharp(req.file.path).resize(800, null, { withoutEnlargement: true, fit: "inside" }).jpeg({ quality: 80 }).toFile(outPath);
+    try { fs.unlinkSync(req.file.path); } catch(e) {}
+    db.prepare("UPDATE events SET cover_image=? WHERE id=?").run(outName, req.params.id);
+    res.json({ success: true, filename: outName });
+  } catch(e) { res.status(500).json({ error: "Upload failed" }); }
+});
+
+app.post("/api/events/:id/rsvp", approvedMiddleware, (req, res) => {
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  if (!user || !user.alumni_id) return res.status(400).json({ error: "No alumni profile" });
+  const existing = db.prepare("SELECT id FROM event_rsvp WHERE event_id=? AND alumni_id=?").get(req.params.id, user.alumni_id);
+  if (existing) {
+    db.prepare("DELETE FROM event_rsvp WHERE event_id=? AND alumni_id=?").run(req.params.id, user.alumni_id);
+    db.prepare("UPDATE events SET rsvp_count = MAX(0, rsvp_count-1) WHERE id=?").run(req.params.id);
+    res.json({ rsvped: false });
+  } else {
+    db.prepare("INSERT INTO event_rsvp (event_id, alumni_id) VALUES (?,?)").run(req.params.id, user.alumni_id);
+    db.prepare("UPDATE events SET rsvp_count = rsvp_count+1 WHERE id=?").run(req.params.id);
+    res.json({ rsvped: true });
+  }
+});
+
+app.get("/api/events/:id/rsvps", adminMiddleware, (req, res) => {
+  res.json(db.prepare("SELECT a.name, a.nickname, a.city FROM event_rsvp r JOIN alumni a ON a.id=r.alumni_id WHERE r.event_id=? ORDER BY r.created_at").all(req.params.id));
 });
 
 app.post("/api/admin/approve/:id", adminMiddleware, (req, res) => {

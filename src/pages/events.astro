@@ -1,0 +1,256 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Events - 7099">
+  <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="block"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    </div>
+  </nav>
+
+  <div class="max-w-3xl mx-auto px-4 py-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-stone-800">Events</h2>
+      <button type="button" id="btn-create" class="hidden bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900" onclick="openForm(null)">+ Buat Event</button>
+    </div>
+
+    <!-- Create / Edit form -->
+    <div id="ev-form" class="hidden bg-white rounded-2xl shadow-sm border border-stone-100 p-5 mb-6">
+      <h3 class="font-semibold text-stone-800 mb-4" id="form-title">Buat Event</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs text-stone-500 mb-1">Judul *</label>
+          <input id="f-title" type="text" class="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-stone-500 mb-1">Tanggal &amp; Waktu</label>
+            <input id="f-date" type="datetime-local" class="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs text-stone-500 mb-1">Lokasi</label>
+            <input id="f-location" type="text" class="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-stone-500 mb-1">Cover Image (opsional)</label>
+          <div id="f-cover-preview" class="hidden mb-2"><img id="f-cover-img" class="rounded-lg max-h-32 object-cover"></div>
+          <input type="file" id="f-cover" accept="image/*" class="text-sm" onchange="previewCover(this)">
+        </div>
+        <div>
+          <label class="block text-xs text-stone-500 mb-1">Deskripsi</label>
+          <div class="flex gap-2 mb-2">
+            <label class="cursor-pointer text-xs bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg text-stone-600 transition">
+              &#128247; Sisipkan Foto
+              <input type="file" id="f-inline-img" accept="image/*" class="hidden" onchange="uploadEventImage(this)">
+            </label>
+            <span id="ev-img-status" class="text-xs text-stone-400 self-center"></span>
+          </div>
+          <textarea id="f-desc" rows="4" class="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-4">
+        <button type="button" onclick="saveEvent()" class="bg-amber-800 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">Simpan</button>
+        <button type="button" onclick="closeForm()" class="border border-stone-300 text-stone-600 px-5 py-2 rounded-lg text-sm hover:bg-stone-50">Batal</button>
+      </div>
+    </div>
+
+    <div id="events-list"></div>
+    <p id="empty-msg" class="hidden text-center text-stone-400 py-12">Belum ada event yang diumumkan.</p>
+  </div>
+
+  <!-- Lightbox -->
+  <div id="lightbox" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onclick="if(event.target===this)closeLB()">
+    <button type="button" onclick="closeLB()" class="absolute top-4 right-4 text-white text-3xl z-50">&times;</button>
+    <button type="button" onclick="lbNav(-1)" class="absolute left-2 top-1/2 -translate-y-1/2 text-white text-4xl z-50 p-2">&#8249;</button>
+    <button type="button" onclick="lbNav(1)" class="absolute right-2 top-1/2 -translate-y-1/2 text-white text-4xl z-50 p-2">&#8250;</button>
+    <img id="lb-img" class="max-w-[90vw] max-h-[85vh] object-contain rounded-lg">
+    <div id="lb-counter" class="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm"></div>
+  </div>
+
+  <script is:inline>
+  var me = null, evEditId = null, eventsCache = [], lbImgs = [], lbIdx = 0;
+
+  fetch('/api/auth/me', {credentials:'include'}).then(function(r){
+    if(r.ok) return r.json();
+  }).then(function(d){
+    if(d && d.user){
+      me = d;
+      document.getElementById('nav-login').textContent = d.user.name || d.user.email;
+      document.getElementById('nav-login').href = '/profile';
+      if(d.user.status === 'approved') document.getElementById('btn-create').classList.remove('hidden');
+    }
+    loadEvents();
+  }).catch(function(){ loadEvents(); });
+
+  function getPhotos(content){
+    var m, r = [], re = /\[foto:\s*([^\]]+)\]/g;
+    while(m = re.exec(content || '')) r.push(m[1].trim());
+    return r;
+  }
+
+  function loadEvents(){
+    fetch('/api/events', {credentials:'include'}).then(function(r){return r.json()}).then(function(list){
+      eventsCache = list;
+      var now = new Date();
+      var upcoming = list.filter(function(e){ return !e.event_date || new Date(e.event_date) >= now; });
+      var past = list.filter(function(e){ return e.event_date && new Date(e.event_date) < now; });
+      upcoming.sort(function(a,b){ return new Date(a.event_date)-new Date(b.event_date); });
+      past.sort(function(a,b){ return new Date(b.event_date)-new Date(a.event_date); });
+      if(!upcoming.length && !past.length){ document.getElementById('empty-msg').classList.remove('hidden'); return; }
+      document.getElementById('empty-msg').classList.add('hidden');
+      var html = '';
+      if(upcoming.length) html += renderSection('Akan Datang', upcoming, false);
+      if(past.length) html += renderSection('Sudah Berlalu', past, true);
+      document.getElementById('events-list').innerHTML = html;
+    });
+  }
+
+  function renderSection(label, items, faded){
+    return '<h3 class="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3 mt-6 first:mt-0">'+label+'</h3>'+
+      items.map(function(ev){ return renderCard(ev, faded); }).join('');
+  }
+
+  function renderCard(ev, faded){
+    var d = ev.event_date ? new Date(ev.event_date) : null;
+    var dateStr = d ? d.toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) : '';
+    var timeStr = (d && ev.event_date && ev.event_date.length > 10) ? d.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '';
+    var inlinePhotos = getPhotos(ev.description);
+    var bodyText = (ev.description || '').replace(/\[foto:\s*[^\]]+\]/g,'').trim();
+    var allPhotos = [];
+    if(ev.cover_image) allPhotos.push('/photos/'+ev.cover_image);
+    inlinePhotos.forEach(function(u){ allPhotos.push(u); });
+    var evPhotosJson = JSON.stringify(allPhotos).replace(/'/g,"\\'");
+
+    var coverHtml = ev.cover_image ?
+      '<img src="/photos/'+ev.cover_image+'" class="w-full max-h-52 object-cover rounded-t-2xl cursor-pointer" onclick="openLB('+JSON.stringify(allPhotos).replace(/"/g,"'")+',0)">' : '';
+
+    var galleryHtml = '';
+    if(inlinePhotos.length){
+      var cols = inlinePhotos.length === 1 ? 'grid-cols-1' : inlinePhotos.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
+      galleryHtml = '<div class="grid '+cols+' gap-1 mt-3">' +
+        inlinePhotos.map(function(url, i){
+          var idx = ev.cover_image ? i+1 : i;
+          return '<img src="'+url+'" class="w-full h-28 object-cover rounded-lg cursor-pointer" onclick="openLB('+JSON.stringify(allPhotos).replace(/"/g,"'")+','+idx+')">';
+        }).join('') + '</div>';
+    }
+
+    var rsvpBtn = '';
+    if(me && me.user && me.user.status === 'approved'){
+      var active = ev.rsvped;
+      rsvpBtn = '<button type="button" id="rsvp-btn-'+ev.id+'" onclick="toggleRsvp('+ev.id+',this)" class="'+(active?'bg-amber-800 text-white':'border border-amber-700 text-amber-800')+' px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-80 transition">'+(active?'&#10003; Hadir':'Saya Hadir')+'</button>';
+    } else if(!me || !me.user){
+      rsvpBtn = '<a href="/login" class="text-sm text-amber-700 hover:underline">Masuk untuk RSVP</a>';
+    }
+    var editBtn = ev.can_edit ? '<button type="button" onclick="openForm('+ev.id+')" class="text-xs text-amber-700 hover:underline">Edit</button>' : '';
+
+    return '<div class="bg-white rounded-2xl shadow-sm border border-stone-100 mb-4 overflow-hidden'+(faded?' opacity-60':'')+'">'+
+      coverHtml+
+      '<div class="p-5">'+
+      '<div class="flex items-start justify-between gap-2 mb-1">'+
+      '<h3 class="text-lg font-bold text-stone-800">'+ev.title+'</h3>'+
+      editBtn+
+      '</div>'+
+      (dateStr ? '<div class="text-sm text-amber-700 font-medium mb-1">&#128197; '+dateStr+(timeStr?' &middot; '+timeStr:'')+'</div>' : '')+
+      (ev.location ? '<div class="text-sm text-stone-500 mb-2">&#128205; '+ev.location+'</div>' : '')+
+      (bodyText ? '<p class="text-sm text-stone-600 leading-relaxed mt-2">'+bodyText+'</p>' : '')+
+      galleryHtml+
+      '<div class="flex items-center gap-4 mt-4">'+rsvpBtn+'<span id="rsvp-count-'+ev.id+'" class="text-xs text-stone-400">'+ev.rsvp_count+' akan hadir</span></div>'+
+      '</div></div>';
+  }
+
+  function openForm(id){
+    evEditId = id;
+    var ev = id ? eventsCache.find(function(e){ return e.id === id; }) : null;
+    document.getElementById('form-title').textContent = id ? 'Edit Event' : 'Buat Event';
+    document.getElementById('f-title').value = ev ? ev.title : '';
+    document.getElementById('f-date').value = ev && ev.event_date ? ev.event_date.slice(0,16) : '';
+    document.getElementById('f-location').value = ev ? ev.location || '' : '';
+    document.getElementById('f-desc').value = ev ? ev.description || '' : '';
+    document.getElementById('f-cover').value = '';
+    if(ev && ev.cover_image){
+      document.getElementById('f-cover-img').src = '/photos/'+ev.cover_image;
+      document.getElementById('f-cover-preview').classList.remove('hidden');
+    } else {
+      document.getElementById('f-cover-preview').classList.add('hidden');
+    }
+    document.getElementById('ev-form').classList.remove('hidden');
+    document.getElementById('f-title').focus();
+    document.getElementById('ev-form').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  function closeForm(){
+    document.getElementById('ev-form').classList.add('hidden');
+    evEditId = null;
+  }
+
+  function previewCover(input){
+    if(!input.files[0]) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      document.getElementById('f-cover-img').src = e.target.result;
+      document.getElementById('f-cover-preview').classList.remove('hidden');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+
+  function uploadEventImage(input){
+    if(!input.files[0]) return;
+    var fd = new FormData(); fd.append('image', input.files[0]);
+    document.getElementById('ev-img-status').textContent = 'Uploading...';
+    fetch('/api/events/upload-image', {method:'POST', credentials:'include', body:fd})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.url){
+          var ta = document.getElementById('f-desc');
+          var pos = ta.selectionStart || ta.value.length;
+          ta.value = ta.value.substring(0,pos)+'\n[foto: '+d.url+']\n'+ta.value.substring(pos);
+          document.getElementById('ev-img-status').textContent = '&#10003; Foto ditambahkan';
+        } else { document.getElementById('ev-img-status').textContent = '&#10007; Gagal'; }
+        input.value = '';
+        setTimeout(function(){ document.getElementById('ev-img-status').textContent = ''; }, 2000);
+      });
+  }
+
+  function saveEvent(){
+    var title = document.getElementById('f-title').value.trim();
+    if(!title) return;
+    var body = {title:title, event_date:document.getElementById('f-date').value, location:document.getElementById('f-location').value.trim(), description:document.getElementById('f-desc').value.trim()};
+    var url = evEditId ? '/api/events/'+evEditId : '/api/events';
+    fetch(url, {method:evEditId?'PUT':'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(body)})
+      .then(function(r){return r.json()}).then(function(d){
+        var eventId = evEditId || d.id;
+        var coverFile = document.getElementById('f-cover').files[0];
+        if(coverFile){
+          var fd = new FormData(); fd.append('cover', coverFile);
+          fetch('/api/events/'+eventId+'/cover', {method:'POST', credentials:'include', body:fd}).then(function(){ closeForm(); loadEvents(); });
+        } else { closeForm(); loadEvents(); }
+      });
+  }
+
+  function toggleRsvp(id, btn){
+    fetch('/api/events/'+id+'/rsvp', {method:'POST', credentials:'include'}).then(function(r){return r.json()}).then(function(d){
+      btn.innerHTML = d.rsvped ? '&#10003; Hadir' : 'Saya Hadir';
+      btn.className = (d.rsvped?'bg-amber-800 text-white':'border border-amber-700 text-amber-800')+' px-4 py-1.5 rounded-lg text-sm font-medium hover:opacity-80 transition';
+      var countEl = document.getElementById('rsvp-count-'+id);
+      if(countEl){ var c = parseInt(countEl.textContent)||0; countEl.textContent=(c+(d.rsvped?1:-1))+' akan hadir'; }
+    });
+  }
+
+  function openLB(imgs, idx){
+    lbImgs = typeof imgs === 'string' ? JSON.parse(imgs) : imgs;
+    lbIdx = idx || 0;
+    document.getElementById('lb-img').src = lbImgs[lbIdx];
+    document.getElementById('lb-counter').textContent = lbImgs.length > 1 ? (lbIdx+1)+' / '+lbImgs.length : '';
+    document.getElementById('lightbox').classList.remove('hidden');
+    document.querySelectorAll('.lb-nav').forEach(function(b){ b.style.display = lbImgs.length > 1 ? '' : 'none'; });
+  }
+  function closeLB(){ document.getElementById('lightbox').classList.add('hidden'); }
+  function lbNav(dir){
+    lbIdx = (lbIdx + dir + lbImgs.length) % lbImgs.length;
+    document.getElementById('lb-img').src = lbImgs[lbIdx];
+    document.getElementById('lb-counter').textContent = (lbIdx+1)+' / '+lbImgs.length;
+  }
+  </script>
+</Layout>
