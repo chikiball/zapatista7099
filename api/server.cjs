@@ -68,6 +68,9 @@ db.exec("CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)");
 db.exec("CREATE TABLE IF NOT EXISTS event_rsvp (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER REFERENCES events(id) ON DELETE CASCADE, alumni_id INTEGER REFERENCES alumni(id), created_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(event_id, alumni_id))");
 try { db.exec("ALTER TABLE events ADD COLUMN created_by INTEGER REFERENCES users(id)"); } catch(e) {}
 try { db.exec("ALTER TABLE events ADD COLUMN cover_image TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN notify_email INTEGER DEFAULT 1"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN unsubscribe_token TEXT"); } catch(e) {}
+db.prepare("UPDATE users SET unsubscribe_token = lower(hex(randomblob(20))) WHERE unsubscribe_token IS NULL").run();
 
 // Telegram notification
 function sendTelegram(text) {
@@ -107,6 +110,15 @@ function sendEmail(to, subject, html) {
       if (err) console.error("Email error:", err.message);
     });
   } catch(e) { console.error("Email error:", e); }
+}
+
+function sendNewsletterEmail(subject, html) {
+  var subscribers = db.prepare("SELECT email, unsubscribe_token FROM users WHERE status='approved' AND notify_email=1 AND email IS NOT NULL").all();
+  subscribers.forEach(function(u) {
+    if (!u.unsubscribe_token) return;
+    var footer = '<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e7e5e4;text-align:center"><p style="font-size:11px;color:#a8a29e">Tidak ingin menerima notifikasi? <a href="https://zapa.inweb.id/api/unsubscribe?token='+u.unsubscribe_token+'" style="color:#92400e">Berhenti berlangganan</a></p></div>';
+    sendEmail(u.email, subject, html + footer);
+  });
 }
 
 async function geocodeCity(city, country) {
@@ -340,7 +352,7 @@ app.post("/api/auth/google", async (req, res) => {
 
 // Get current user
 app.get("/api/auth/me", authMiddleware, (req, res) => {
-  const user = db.prepare("SELECT id, email, name, alumni_id, role, status, created_at FROM users WHERE id = ?").get(req.user.id);
+  const user = db.prepare("SELECT id, email, name, alumni_id, role, status, created_at, notify_email FROM users WHERE id = ?").get(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
   let profile = null;
@@ -366,6 +378,21 @@ app.get("/api/profile", authMiddleware, (req, res) => {
     profile = db.prepare("SELECT * FROM alumni WHERE id = ?").get(user.alumni_id);
   }
   res.json({ user: { id: user.id, email: user.email, name: user.name }, profile });
+});
+
+app.put("/api/profile/notifications", approvedMiddleware, (req, res) => {
+  const { notify_email } = req.body;
+  db.prepare("UPDATE users SET notify_email=? WHERE id=?").run(notify_email ? 1 : 0, req.user.id);
+  res.json({ success: true });
+});
+
+app.get("/api/unsubscribe", (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send("Link tidak valid");
+  const user = db.prepare("SELECT id, email FROM users WHERE unsubscribe_token=?").get(token);
+  if (!user) return res.status(404).send("Link tidak valid");
+  db.prepare("UPDATE users SET notify_email=0 WHERE id=?").run(user.id);
+  res.send('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Unsubscribe - 7099</title></head><body style="font-family:sans-serif;text-align:center;padding:60px 20px;background:#faf8f4"><div style="max-width:400px;margin:0 auto;background:white;border-radius:16px;padding:40px;box-shadow:0 2px 8px rgba(0,0,0,.08)"><h2 style="color:#92400e;margin-bottom:8px">Berhasil &#10003;</h2><p style="color:#57534e;margin-bottom:16px">Email <b>'+user.email+'</b> tidak akan menerima notifikasi lagi.</p><p style="font-size:13px;color:#a8a29e">Kamu bisa mengaktifkan kembali notifikasi kapan saja melalui halaman Profil.</p><a href="https://zapa.inweb.id" style="display:inline-block;margin-top:24px;background:#92400e;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:14px">Kembali ke 7099</a></div></body></html>');
 });
 
 // Update or create profile
@@ -519,6 +546,12 @@ app.post("/api/articles", approvedMiddleware, (req, res) => {
   var now = new Date().toISOString();
   var pub = status === "published" ? now : null;
   var result = db.prepare("INSERT INTO articles (author_id, title, content, status, published_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(user.alumni_id, title, content || "", status || "draft", pub, now, now);
+  if (status === "published") {
+    var author = db.prepare("SELECT name, nickname FROM alumni WHERE id=?").get(user.alumni_id);
+    var authorName = author ? (author.nickname || author.name) : "Alumni";
+    var excerpt = (content || "").replace(/\[foto:[^\]]+\]/g,"").trim().substring(0,150);
+    sendNewsletterEmail("Artikel Baru: " + title, emailTemplate("Artikel Baru di 7099 ✍️", "<b>" + authorName + "</b> baru saja menerbitkan artikel baru:<br><br><b style='font-size:16px'>" + title + "</b>" + (excerpt ? "<br><br><span style='color:#57534e;font-size:14px'>" + excerpt + (excerpt.length >= 150 ? "..." : "") + "</span>" : ""), "Baca Sekarang", "https://zapa.inweb.id/articles"));
+  }
   res.json({ success: true, id: result.lastInsertRowid });
 });
 
@@ -531,7 +564,14 @@ app.put("/api/articles/:id", approvedMiddleware, (req, res) => {
   var { title, content, status } = req.body;
   var now = new Date().toISOString();
   var pub = status === "published" && !article.published_at ? now : article.published_at;
+  var isFirstPublish = status === "published" && !article.published_at;
   db.prepare("UPDATE articles SET title=?, content=?, status=?, published_at=?, updated_at=? WHERE id=?").run(title, content, status, pub, now, req.params.id);
+  if (isFirstPublish) {
+    var author = db.prepare("SELECT name, nickname FROM alumni WHERE id=?").get(user.alumni_id);
+    var authorName = author ? (author.nickname || author.name) : "Alumni";
+    var excerpt = (content || "").replace(/\[foto:[^\]]+\]/g,"").trim().substring(0,150);
+    sendNewsletterEmail("Artikel Baru: " + title, emailTemplate("Artikel Baru di 7099 ✍️", "<b>" + authorName + "</b> baru saja menerbitkan artikel baru:<br><br><b style='font-size:16px'>" + title + "</b>" + (excerpt ? "<br><br><span style='color:#57534e;font-size:14px'>" + excerpt + (excerpt.length >= 150 ? "..." : "") + "</span>" : ""), "Baca Sekarang", "https://zapa.inweb.id/articles"));
+  }
   res.json({ success: true });
 });
 
@@ -818,6 +858,9 @@ app.get("/api/events", (req, res) => {
 app.post("/api/events", approvedMiddleware, (req, res) => {
   const { title, description, event_date, location } = req.body;
   const r = db.prepare("INSERT INTO events (title, description, event_date, location, rsvp_count, created_by) VALUES (?,?,?,?,0,?)").run(title, description, event_date, location, req.user.id);
+  var dateStr = event_date ? new Date(event_date).toLocaleDateString('id-ID',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) : '';
+  var evBody = 'Ada event baru yang ditambahkan:<br><br><b style="font-size:16px">'+title+'</b>'+(dateStr?'<br><br>&#128197; '+dateStr:'')+(location?'<br>&#128205; '+location:'')+(description?'<br><br><span style="color:#57534e;font-size:14px">'+description.substring(0,150)+(description.length>150?'...':'')+'</span>':'');
+  sendNewsletterEmail('Event Baru: '+title, emailTemplate('Event Baru di 7099 &#128197;', evBody, 'Lihat Event', 'https://zapa.inweb.id/events'));
   res.json({ success: true, id: r.lastInsertRowid });
 });
 

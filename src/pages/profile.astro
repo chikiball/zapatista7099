@@ -96,13 +96,29 @@ import Layout from "../layouts/Layout.astro";
         <div id="upload-msg" class="hidden text-sm mt-2"></div>
       </div>
       <div class="text-center mt-6"><a href="/" class="text-sm text-amber-700 hover:underline">&larr; Kembali ke Beranda</a></div>
+
+      <!-- Notification Settings -->
+      <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
+        <h2 class="text-xl font-bold text-stone-800 mb-4">Notifikasi</h2>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-stone-700">Email Notifikasi</p>
+            <p class="text-xs text-stone-400 mt-0.5">Terima email saat ada artikel atau event baru</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="notify-toggle" class="sr-only peer" onchange="toggleNotify(this)">
+            <div class="w-11 h-6 bg-stone-200 rounded-full peer peer-checked:bg-amber-700 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+          </label>
+        </div>
+        <p id="notify-msg" class="hidden text-xs text-stone-500 mt-2"></p>
+      </div>
     </div>
   </div>
 
   <script is:inline>
     var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university","class"];
 
-    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}}catch(e){showNotLogged()}}
+    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("notify-toggle").checked=d.user.notify_email!==0;if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}}catch(e){showNotLogged()}}
 
     function showNotLogged(){document.getElementById("loading").classList.add("hidden");document.getElementById("not-logged").classList.remove("hidden")}
 
@@ -115,6 +131,7 @@ import Layout from "../layouts/Layout.astro";
     async function linkAlumni(id){var r=await fetch("/api/profile/link",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({alumni_id:id})});var d=await r.json();if(d.success){fillForm(d.profile);document.getElementById("no-match-banner").classList.add("hidden");document.getElementById("match-banner").classList.remove("hidden");document.getElementById("save-msg").textContent="✅ Data berhasil ditautkan!";document.getElementById("save-msg").classList.remove("hidden")}}
 
     async function logout(){await fetch("/api/auth/logout",{method:"POST",credentials:"include"});window.location.href="/login"}
+    function toggleNotify(cb){fetch("/api/profile/notifications",{method:"PUT",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({notify_email:cb.checked?1:0})}).then(function(){var m=document.getElementById("notify-msg");m.textContent=cb.checked?"✅ Notifikasi diaktifkan":"🔕 Notifikasi dinonaktifkan";m.classList.remove("hidden");setTimeout(function(){m.classList.add("hidden")},2500)})}
 
     
     // Photo functions
