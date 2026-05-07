@@ -56,7 +56,7 @@ Browser → https://zapa.inweb.id
 - **Map:** D3 orthographic globe, neon pins, dynamic clustering, starburst cards, city labels
 - **Stats:** 12 sections with scroll animations, normalized jobs/industries/universities
 - **Articles:** Magazine layout, masonry photo gallery, lightbox with swipe, inline image upload (sharp resize), auto-link URLs, [foto:] tag system
-- **Events:** RSVP toggle, cover + inline images, [foto:] tag system, lightbox. Any approved user can create; only admin can delete; creator/admin can edit.
+- **Events:** RSVP toggle, cover + inline images, [foto:] tag system, lightbox. Any approved user can create; only admin can delete; creator/admin can edit. Date tapping downloads `.ics` for native calendar (iOS/Android/desktop). Location links to Google Maps (opens native maps app on mobile).
 - **Photos:** Symlink dist/photos → public/photos (survives builds), sharp auto-resize max 800px
 - **Auto-Geocoding:** When alumni saves profile or is approved by admin, city+country is sent to Nominatim to fill lat/lng automatically. Fires in background (non-blocking). Existing coords not overwritten unless city changes.
 

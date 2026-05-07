@@ -54,7 +54,7 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + "-" + Math.random().toString(36).substr(2,6) + "." + ext);
   }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 5*1024*1024 }, fileFilter: function(req,file,cb){
+const upload = multer({ storage: storage, limits: { fileSize: 20*1024*1024 }, fileFilter: function(req,file,cb){
   if(file.mimetype.startsWith("image/")) cb(null,true); else cb(new Error("Only images allowed"));
 }});
 

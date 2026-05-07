@@ -18,7 +18,7 @@
 | Directory (browse alumni, login-gated) | ✅ | `/directory` |
 | Statistics / Charts | ✅ | `/stats` |
 | Articles / Blog (cover + inline images, lightbox) | ✅ | `/articles` |
-| Events (RSVP, cover + inline images, lightbox) | ✅ | `/events` |
+| Events (RSVP, images, .ics calendar, maps link) | ✅ | `/events` |
 | Admin Panel (approval queue, alumni/user mgmt, settings) | ✅ | `/admin` |
 | Email Notifications (new article/event, unsubscribe) | ✅ | — |
 | Auto-Geocoding (city → lat/lng via Nominatim) | ✅ | — |

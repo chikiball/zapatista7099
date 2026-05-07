@@ -153,12 +153,47 @@ import Layout from "../layouts/Layout.astro";
       '<h3 class="text-lg font-bold text-stone-800">'+ev.title+'</h3>'+
       editBtn+
       '</div>'+
-      (dateStr ? '<div class="text-sm text-amber-700 font-medium mb-1">&#128197; '+dateStr+(timeStr?' &middot; '+timeStr:'')+'</div>' : '')+
-      (ev.location ? '<div class="text-sm text-stone-500 mb-2">&#128205; '+ev.location+'</div>' : '')+
+      (dateStr ? '<button type="button" onclick="downloadICS('+ev.id+')" title="Tambah ke kalender" class="text-sm text-amber-700 font-medium mb-1 hover:underline text-left block">&#128197; '+dateStr+(timeStr?' &middot; '+timeStr:'')+'</button>' : '')+
+      (ev.location ? '<a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(ev.location)+'" target="_blank" rel="noopener" class="text-sm text-stone-500 mb-2 hover:text-amber-700 hover:underline block">&#128205; '+ev.location+'</a>' : '')+
       (bodyText ? '<p class="text-sm text-stone-600 leading-relaxed mt-2">'+bodyText+'</p>' : '')+
       galleryHtml+
       '<div class="flex items-center gap-4 mt-4">'+rsvpBtn+'<span id="rsvp-count-'+ev.id+'" class="text-xs text-stone-400">'+ev.rsvp_count+' akan hadir</span></div>'+
       '</div></div>';
+  }
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function fmtICSDate(dt, hasTime){
+    if(!hasTime) return dt.replace(/-/g,'');
+    return dt.replace(/-/g,'').replace(':','').replace('T','T')+'00';
+  }
+  function downloadICS(id){
+    var ev = eventsCache.find(function(e){ return e.id === id; });
+    if(!ev || !ev.event_date) return;
+    var hasTime = ev.event_date.length > 10;
+    var dtStart = fmtICSDate(ev.event_date, hasTime);
+    var dtEnd = dtStart;
+    if(hasTime){
+      var d2 = new Date(ev.event_date); d2.setHours(d2.getHours()+2);
+      dtEnd = d2.getFullYear()+''+pad(d2.getMonth()+1)+''+pad(d2.getDate())+'T'+pad(d2.getHours())+''+pad(d2.getMinutes())+'00';
+    }
+    var esc = function(s){ return (s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n'); };
+    var lines = [
+      'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//7099//Alumni 7099//EN',
+      'BEGIN:VEVENT',
+      'UID:event-'+ev.id+'@zapa.inweb.id',
+      (hasTime?'DTSTART:'+dtStart:'DTSTART;VALUE=DATE:'+dtStart),
+      (hasTime?'DTEND:'+dtEnd:'DTEND;VALUE=DATE:'+dtEnd),
+      'SUMMARY:'+esc(ev.title),
+      'DESCRIPTION:'+esc((ev.description||'').replace(/\[foto:[^\]]+\]/g,'')),
+      'LOCATION:'+esc(ev.location||''),
+      'URL:https://zapa.inweb.id/events',
+      'END:VEVENT','END:VCALENDAR'
+    ];
+    var blob = new Blob([lines.join('\r\n')],{type:'text/calendar;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href=url; a.download='event-'+id+'.ics';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function openForm(id){
@@ -207,10 +242,10 @@ import Layout from "../layouts/Layout.astro";
           var pos = ta.selectionStart || ta.value.length;
           ta.value = ta.value.substring(0,pos)+'\n[foto: '+d.url+']\n'+ta.value.substring(pos);
           document.getElementById('ev-img-status').textContent = '&#10003; Foto ditambahkan';
-        } else { document.getElementById('ev-img-status').textContent = '&#10007; Gagal'; }
+        } else { document.getElementById('ev-img-status').textContent = '&#10007; Gagal: '+(d.error||'unknown'); }
         input.value = '';
         setTimeout(function(){ document.getElementById('ev-img-status').textContent = ''; }, 2000);
-      });
+      }).catch(function(){ document.getElementById('ev-img-status').textContent = '&#10007; Gagal upload'; input.value=''; });
   }
 
   function saveEvent(){
@@ -224,9 +259,11 @@ import Layout from "../layouts/Layout.astro";
         var coverFile = document.getElementById('f-cover').files[0];
         if(coverFile){
           var fd = new FormData(); fd.append('cover', coverFile);
-          fetch('/api/events/'+eventId+'/cover', {method:'POST', credentials:'include', body:fd}).then(function(){ closeForm(); loadEvents(); });
+          fetch('/api/events/'+eventId+'/cover', {method:'POST', credentials:'include', body:fd})
+            .then(function(){ closeForm(); loadEvents(); })
+            .catch(function(){ closeForm(); loadEvents(); });
         } else { closeForm(); loadEvents(); }
-      });
+      }).catch(function(e){ alert('Gagal menyimpan event'); });
   }
 
   function toggleRsvp(id, btn){
