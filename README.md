@@ -17,11 +17,14 @@
 | Interactive Globe Map | ✅ | `/map` |
 | Directory (browse alumni, login-gated) | ✅ | `/directory` |
 | Statistics / Charts | ✅ | `/stats` |
-| Articles / Blog (cover + inline images, lightbox) | ✅ | `/articles` |
+| Articles (cover + inline images/videos, lightbox) | ✅ | `/articles` |
 | Events (RSVP, images, .ics calendar, maps link) | ✅ | `/events` |
+| Gallery (folders, 6 view modes, admin layout control) | ✅ | `/gallery` |
+| Forum (categories, threads, replies, reactions, @mentions) | ✅ | `/forum` |
 | Admin Panel (approval queue, alumni/user mgmt, settings) | ✅ | `/admin` |
-| Email Notifications (new article/event, unsubscribe) | ✅ | — |
+| Email Notifications (articles, events, forum replies/mentions) | ✅ | — |
 | Auto-Geocoding (city → lat/lng via Nominatim) | ✅ | — |
+| PWA (installable, custom icon, app name) | ✅ | — |
 
 ## Tech Stack
 
@@ -33,6 +36,7 @@
 | Globe/Map | D3.js + Canvas + TopoJSON |
 | Auth | JWT (HttpOnly cookies) + Google Sign-In |
 | Image Processing | sharp (resize to 800px, JPEG 80%) |
+| Video | HTML5 `<video>` via `[video:]` tag, ffmpeg for frame extraction |
 | Email | nodemailer (SMTP via config table) |
 | Geocoding | Nominatim / OpenStreetMap (no API key) |
 | Process Manager | PM2 |
@@ -43,21 +47,33 @@
 ## Project Structure
 
 ```
-├── src/pages/
-│   ├── index.astro        # Homepage
-│   ├── login.astro        # Login / signup (Google + email)
-│   ├── reset.astro        # Password reset
-│   ├── profile.astro      # Profile edit, photo upload, notification toggle
-│   ├── map.astro          # Interactive D3 globe map
-│   ├── directory.astro    # Alumni directory (approved users)
-│   ├── stats.astro        # Statistics and charts
-│   ├── articles.astro     # Blog (cover image, inline [foto:] tags, lightbox)
-│   ├── events.astro       # Events (RSVP, cover + inline images)
-│   └── admin.astro        # Admin panel (tabs: dash, pending, alumni, users, events, settings)
+├── src/
+│   ├── pages/
+│   │   ├── index.astro        # Homepage
+│   │   ├── login.astro        # Login / signup (Google + email)
+│   │   ├── reset.astro        # Password reset
+│   │   ├── profile.astro      # Profile edit, photo upload, notification toggle
+│   │   ├── map.astro          # Interactive D3 globe map
+│   │   ├── directory.astro    # Alumni directory (approved users)
+│   │   ├── stats.astro        # Statistics and charts
+│   │   ├── articles.astro     # Blog ([foto:] + [video:] tags, lightbox)
+│   │   ├── events.astro       # Events (RSVP, cover + inline images)
+│   │   ├── gallery.astro      # Photo gallery (6 layouts, folder-based)
+│   │   ├── forum.astro        # Discussion forum (categories, threads, reactions)
+│   │   └── admin.astro        # Admin panel
+│   └── layouts/
+│       └── Layout.astro       # HTML shell with PWA meta tags
 ├── api/
-│   └── server.cjs         # Express API (CommonJS — Astro sets type:module)
+│   └── server.cjs             # Express API (CommonJS)
+├── scripts/
+│   ├── import-insta.cjs       # One-time: Instagram folders → articles
+│   └── seed-gallery.cjs       # One-time: seed Yearbook + Instagram gallery folders
 ├── public/
-│   └── photos/            # Uploaded images (symlinked from dist/photos)
+│   ├── photos/                # Uploaded images (symlinked from dist/photos)
+│   ├── manifest.json          # PWA manifest
+│   ├── icon-192.png           # PWA icon (Android)
+│   ├── icon-512.png           # PWA icon (splash)
+│   └── icon-180.png           # PWA icon (iOS)
 ├── package.json
 └── astro.config.mjs
 ```
@@ -106,7 +122,7 @@ pm2 restart alumni-api  # if API changed
 | `/api/profile/notifications` | PUT | Approved | Toggle email notifications |
 | `/api/unsubscribe` | GET | No | One-click unsubscribe via token |
 
-### Content
+### Articles
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/articles` | GET | No | List published articles |
@@ -114,6 +130,10 @@ pm2 restart alumni-api  # if API changed
 | `/api/articles/:id` | GET/PUT/DELETE | — | Read/edit/delete article |
 | `/api/articles/:id/cover` | POST | Approved | Upload cover image |
 | `/api/articles/upload-image` | POST | Approved | Upload inline image |
+
+### Events
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
 | `/api/events` | GET | No | List events (with RSVP status if logged in) |
 | `/api/events` | POST | Approved | Create event (triggers email notification) |
 | `/api/events/:id` | PUT/DELETE | — | Edit (author/admin) / Delete (admin) |
@@ -121,6 +141,33 @@ pm2 restart alumni-api  # if API changed
 | `/api/events/upload-image` | POST | Approved | Upload inline event image |
 | `/api/events/:id/rsvp` | POST | Approved | Toggle RSVP |
 | `/api/events/:id/rsvps` | GET | Admin | List attendees |
+
+### Gallery
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/gallery/folders` | GET | No | List folders with preview photos + counts |
+| `/api/gallery/folders/:id` | GET | No | List photos in folder |
+| `/api/gallery/folders` | POST | Approved | Create folder |
+| `/api/gallery/folders/:id/photos` | POST | Approved | Upload photos (up to 20) |
+| `/api/gallery/folders/:id/layout` | PUT | Admin | Set default display layout |
+| `/api/gallery/folders/:id` | DELETE | Admin | Delete folder + all photos |
+| `/api/gallery/photos/:id` | DELETE | Admin | Delete single photo |
+
+### Forum
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/forum/categories` | GET | No | List categories with thread counts |
+| `/api/forum/categories/:id/threads` | GET | No | List threads (stickies first) |
+| `/api/forum/threads/:id` | GET | No | Thread + replies + reactions |
+| `/api/forum/threads` | POST | Approved | Create thread |
+| `/api/forum/threads/:id` | PUT | Author/Admin | Edit thread |
+| `/api/forum/threads/:id` | DELETE | Admin | Delete thread |
+| `/api/forum/threads/:id/sticky` | PUT | Admin | Toggle sticky pin |
+| `/api/forum/threads/:id/lock` | PUT | Admin | Toggle lock |
+| `/api/forum/threads/:id/replies` | POST | Approved | Add reply (sends notifications) |
+| `/api/forum/replies/:id` | PUT | Author/Admin | Edit reply |
+| `/api/forum/replies/:id` | DELETE | Admin | Delete reply |
+| `/api/forum/react` | POST | Approved | Toggle emoji reaction |
 
 ### Admin
 | Endpoint | Method | Auth | Description |
@@ -131,6 +178,8 @@ pm2 restart alumni-api  # if API changed
 | `/api/admin/reject/:id` | POST | Admin | Reject user |
 | `/api/admin/alumni` | GET/PUT | Admin | List/edit alumni |
 | `/api/admin/alumni/:id` | DELETE | Admin | Delete alumni |
+| `/api/admin/articles` | GET | Admin | List all articles |
+| `/api/admin/articles/:id` | DELETE | Admin | Delete any article |
 | `/api/admin/users` | GET/PUT/DELETE | Admin | Manage users |
 | `/api/admin/config` | GET/PUT | Admin | SMTP + Telegram settings |
 | `/api/admin/export` | GET | Admin | Export alumni CSV |
@@ -142,13 +191,18 @@ pm2 restart alumni-api  # if API changed
 | `alumni` | name, city, country, latitude, longitude, job_title, company, class |
 | `users` | email, role, status, alumni_id, notify_email, unsubscribe_token |
 | `articles` | title, content, status, cover_image, author_id |
-| `events` | title, description, event_date, location, cover_image, rsvp_count, created_by |
+| `events` | title, description, event_date, location, cover_image, created_by |
 | `event_rsvp` | event_id, alumni_id |
 | `photos` | alumni_id, filename |
+| `gallery_folders` | name, description, icon, sort_order, default_layout |
+| `gallery_photos` | folder_id, filename, caption, uploaded_by |
+| `forum_categories` | name, description, icon, sort_order |
+| `forum_threads` | category_id, author_id, title, body, is_sticky, is_locked, view_count |
+| `forum_replies` | thread_id, author_id, body |
+| `forum_reactions` | thread_id, reply_id, alumni_id, emoji |
 | `config` | key, value (smtp_*, telegram_*) |
 
 ## What's NOT Built Yet
 
 - Memorial Page
-- Photo Gallery from yearbook (243 portraits extracted, not uploaded)
 - Auto-Geocoding for cities entered via admin panel (currently only on profile save / approval)
