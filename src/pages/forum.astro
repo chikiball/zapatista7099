@@ -1,0 +1,373 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Forum - 7099">
+  <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="block"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    </div>
+  </nav>
+
+  <div class="max-w-3xl mx-auto px-4 py-6">
+
+    <!-- ── Category list ── -->
+    <div id="v-categories">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-stone-800">Forum 7099</h2>
+      </div>
+      <div id="cat-list" class="space-y-3"></div>
+    </div>
+
+    <!-- ── Thread list ── -->
+    <div id="v-threads" class="hidden">
+      <div class="flex items-center gap-3 mb-1">
+        <button onclick="showCategories()" class="text-sm text-amber-700 hover:underline">&larr; Forum</button>
+        <span class="text-stone-300">|</span>
+        <span id="tl-icon" class="text-lg"></span>
+        <h2 id="tl-name" class="text-xl font-bold text-stone-800"></h2>
+      </div>
+      <p id="tl-desc" class="text-sm text-stone-500 mb-4"></p>
+
+      <div class="flex items-center justify-between mb-5">
+        <span id="tl-count" class="text-xs text-stone-400"></span>
+        <button id="btn-new-thread" class="hidden bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900" onclick="showNewThread()">+ Thread Baru</button>
+      </div>
+
+      <!-- New thread form -->
+      <div id="new-thread-form" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+        <h3 class="font-semibold text-stone-800 mb-3">Thread Baru</h3>
+        <input type="text" id="nt-title" placeholder="Judul thread..." maxlength="120"
+          class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm mb-2 focus:ring-2 focus:ring-amber-500 outline-none">
+        <textarea id="nt-body" rows="5" placeholder="Tulis isi postinganmu... (gunakan @nickname untuk mention teman)"
+          class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm mb-3 focus:ring-2 focus:ring-amber-500 outline-none resize-y"></textarea>
+        <div class="flex gap-2 items-center">
+          <button onclick="submitNewThread()" class="bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">Kirim</button>
+          <button onclick="hideNewThread()" class="text-stone-500 text-sm px-3 py-2 hover:text-stone-800">Batal</button>
+          <span id="nt-msg" class="text-sm text-stone-500 ml-2"></span>
+        </div>
+      </div>
+
+      <div id="threads-list" class="space-y-2"></div>
+      <p id="threads-empty" class="hidden text-center text-stone-400 py-12">Belum ada thread. Jadilah yang pertama posting!</p>
+    </div>
+
+    <!-- ── Thread view ── -->
+    <div id="v-thread" class="hidden">
+      <button onclick="showThreads()" class="text-sm text-amber-700 hover:underline mb-4 inline-block">&larr; Kembali ke daftar</button>
+
+      <!-- OP -->
+      <div id="thread-op" class="bg-white rounded-xl shadow-sm p-5 mb-4"></div>
+
+      <!-- Replies -->
+      <div id="thread-replies" class="space-y-3 mb-6"></div>
+
+      <!-- Reply form -->
+      <div id="reply-section" class="hidden bg-white rounded-xl shadow-sm p-4">
+        <h4 class="font-semibold text-stone-700 text-sm mb-3">Tulis Balasan</h4>
+        <textarea id="reply-body" rows="4" placeholder="Balas thread ini... (gunakan @nickname untuk mention)"
+          class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm mb-3 focus:ring-2 focus:ring-amber-500 outline-none resize-y"></textarea>
+        <div class="flex gap-2 items-center">
+          <button onclick="submitReply()" class="bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">Kirim Balasan</button>
+          <span id="reply-msg" class="text-sm text-stone-500 ml-2"></span>
+        </div>
+      </div>
+      <p id="locked-notice" class="hidden text-center text-stone-400 text-sm py-4 border border-stone-200 rounded-xl">🔒 Thread ini dikunci — tidak bisa dibalas.</p>
+      <p id="login-notice" class="hidden text-center text-stone-400 text-sm py-4 border border-stone-200 rounded-xl"><a href="/login" class="text-amber-700 hover:underline">Masuk</a> untuk ikut berdiskusi.</p>
+    </div>
+  </div>
+</Layout>
+
+<script is:inline>
+  var isApproved=false, isAdmin=false, myAlumniId=null;
+  var currentCatId=null, currentThreadId=null;
+  var EMOJIS=['❤️','👍','😂','🎉','😮'];
+
+  fetch('/api/auth/me',{credentials:'include'}).then(function(r){return r.ok?r.json():null}).then(function(d){
+    if(!d||!d.user)return;
+    isApproved=d.user.status==='approved';
+    isAdmin=d.user.role==='admin';
+    myAlumniId=d.user.alumni_id;
+    var el=document.getElementById('nav-login');
+    if(el){el.textContent=d.user.name||'Profil';el.href='/profile';}
+    if(isApproved)document.getElementById('btn-new-thread').classList.remove('hidden');
+  }).catch(function(){});
+
+  // ── Categories ─────────────────────────────────────────────────────────────
+
+  function showCategories(){
+    document.getElementById('v-threads').classList.add('hidden');
+    document.getElementById('v-thread').classList.add('hidden');
+    document.getElementById('v-categories').classList.remove('hidden');
+    currentCatId=null;currentThreadId=null;
+    history.replaceState(null,'','/forum');
+  }
+
+  function loadCategories(){
+    fetch('/api/forum/categories').then(function(r){return r.json()}).then(function(list){
+      var el=document.getElementById('cat-list');el.innerHTML='';
+      list.forEach(function(c){
+        var card=document.createElement('a');
+        card.href='javascript:void(0)';
+        card.onclick=function(){openCategory(c.id,c.name,c.description||'',c.icon);};
+        card.className='flex items-center gap-4 bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition cursor-pointer block';
+        var icon=document.createElement('div');
+        icon.style.cssText='font-size:2rem;width:52px;height:52px;display:flex;align-items:center;justify-content:center;background:#fef3c7;border-radius:12px;flex-shrink:0';
+        icon.textContent=c.icon;
+        var info=document.createElement('div');info.style.cssText='flex:1;min-width:0';
+        var nm=document.createElement('p');nm.className='font-semibold text-stone-800';nm.textContent=c.name;
+        var ds=document.createElement('p');ds.className='text-xs text-stone-500 truncate';ds.textContent=c.description||'';
+        var meta=document.createElement('div');meta.className='flex items-center gap-2 mt-1';
+        var tc=document.createElement('span');tc.className='text-xs text-stone-400';tc.textContent=c.thread_count+' thread';
+        meta.appendChild(tc);
+        if(c.last_author){var la=document.createElement('span');la.className='text-xs text-stone-300';la.textContent='· Terakhir: '+c.last_author;meta.appendChild(la);}
+        info.appendChild(nm);info.appendChild(ds);info.appendChild(meta);
+        var arr=document.createElement('span');arr.className='text-stone-300 text-lg';arr.textContent='›';
+        card.appendChild(icon);card.appendChild(info);card.appendChild(arr);
+        el.appendChild(card);
+      });
+    });
+  }
+
+  // ── Thread list ─────────────────────────────────────────────────────────────
+
+  function openCategory(id,name,desc,icon){
+    currentCatId=id;
+    document.getElementById('tl-name').textContent=name;
+    document.getElementById('tl-desc').textContent=desc;
+    document.getElementById('tl-icon').textContent=icon||'';
+    document.getElementById('v-categories').classList.add('hidden');
+    document.getElementById('v-threads').classList.remove('hidden');
+    hideNewThread();
+    history.replaceState(null,'','?category='+id);
+    loadThreads(id);
+  }
+
+  function showThreads(){
+    document.getElementById('v-thread').classList.add('hidden');
+    document.getElementById('v-threads').classList.remove('hidden');
+    currentThreadId=null;
+    history.replaceState(null,'','?category='+currentCatId);
+    loadThreads(currentCatId);
+  }
+
+  function loadThreads(catId){
+    fetch('/api/forum/categories/'+catId+'/threads').then(function(r){return r.json()}).then(function(d){
+      var list=d.threads||[];
+      document.getElementById('tl-count').textContent=list.length+' thread';
+      var el=document.getElementById('threads-list');el.innerHTML='';
+      document.getElementById('threads-empty').classList.toggle('hidden',!!list.length);
+      list.forEach(function(t){
+        var row=document.createElement('div');
+        row.className='flex items-start gap-3 bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition cursor-pointer';
+        row.onclick=function(){openThread(t.id);};
+
+        var left=document.createElement('div');left.style.cssText='flex:1;min-width:0';
+        var titleRow=document.createElement('div');titleRow.className='flex items-center gap-2 flex-wrap mb-1';
+        if(t.is_sticky){var pin=document.createElement('span');pin.className='text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium';pin.textContent='📌 Sticky';titleRow.appendChild(pin);}
+        if(t.is_locked){var lk=document.createElement('span');lk.className='text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full';lk.textContent='🔒';titleRow.appendChild(lk);}
+        var tl=document.createElement('span');tl.className='font-semibold text-stone-800 text-sm';tl.textContent=t.title;titleRow.appendChild(tl);
+        var meta=document.createElement('p');meta.className='text-xs text-stone-400';
+        var author=(t.author_nick||t.author_name||'Anonim');
+        var timeStr=t.last_reply_at?timeAgo(t.last_reply_at):timeAgo(t.created_at);
+        meta.textContent=author+' · '+timeStr+(t.reply_count?' · '+t.reply_count+' reply':'');
+        left.appendChild(titleRow);left.appendChild(meta);
+
+        var right=document.createElement('div');right.style.cssText='text-align:right;flex-shrink:0';
+        var vc=document.createElement('p');vc.className='text-xs text-stone-300';vc.textContent=t.view_count+' views';right.appendChild(vc);
+
+        row.appendChild(left);row.appendChild(right);
+        el.appendChild(row);
+      });
+    });
+  }
+
+  function showNewThread(){document.getElementById('new-thread-form').classList.remove('hidden');document.getElementById('nt-title').focus();}
+  function hideNewThread(){document.getElementById('new-thread-form').classList.add('hidden');document.getElementById('nt-title').value='';document.getElementById('nt-body').value='';document.getElementById('nt-msg').textContent='';}
+  function submitNewThread(){
+    var title=document.getElementById('nt-title').value.trim();
+    var body=document.getElementById('nt-body').value.trim();
+    var msg=document.getElementById('nt-msg');
+    if(!title||!body){msg.textContent='Judul dan isi wajib diisi';return;}
+    msg.textContent='Mengirim...';
+    fetch('/api/forum/threads',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({category_id:currentCatId,title:title,body:body})})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.success){hideNewThread();openThread(d.id);}
+        else{msg.textContent=d.error||'Gagal mengirim';}
+      }).catch(function(){msg.textContent='Gagal mengirim';});
+  }
+
+  // ── Thread view ─────────────────────────────────────────────────────────────
+
+  function openThread(id){
+    currentThreadId=id;
+    document.getElementById('v-threads').classList.add('hidden');
+    document.getElementById('v-thread').classList.remove('hidden');
+    history.replaceState(null,'','?thread='+id);
+    loadThread(id);
+  }
+
+  function loadThread(id){
+    fetch('/api/forum/threads/'+id).then(function(r){return r.json()}).then(function(d){
+      var t=d.thread,replies=d.replies||[];
+
+      // OP block
+      var op=document.getElementById('thread-op');op.innerHTML='';
+      if(t.is_sticky){var pin=document.createElement('span');pin.className='inline-block text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-medium mb-2';pin.textContent='📌 Sticky';op.appendChild(pin);}
+      var h1=document.createElement('h1');h1.className='text-xl font-bold text-stone-800 mb-2 leading-snug';h1.textContent=t.title;op.appendChild(h1);
+      var metaEl=document.createElement('p');metaEl.className='text-xs text-stone-400 mb-4';
+      metaEl.textContent=(t.author_nick||t.author_name||'Anonim')+' · '+timeAgo(t.created_at)+' · '+t.view_count+' views';op.appendChild(metaEl);
+      var bodyEl=document.createElement('div');bodyEl.className='text-stone-700 text-sm leading-relaxed whitespace-pre-wrap';
+      bodyEl.textContent=t.body;op.appendChild(bodyEl);
+      op.appendChild(buildReactions(t.reactions||[], t.id, null));
+      if(isAdmin){
+        var adminRow=document.createElement('div');adminRow.className='flex gap-3 mt-3 pt-3 border-t border-stone-100';
+        var stickyBtn=document.createElement('button');stickyBtn.className='text-xs text-amber-700 hover:underline';
+        stickyBtn.textContent=t.is_sticky?'Unpin':'Pin';
+        stickyBtn.onclick=function(){toggleSticky(t.id);};
+        var lockBtn=document.createElement('button');lockBtn.className='text-xs text-stone-500 hover:underline';
+        lockBtn.textContent=t.is_locked?'Unlock':'Lock';
+        lockBtn.onclick=function(){toggleLock(t.id);};
+        var delBtn=document.createElement('button');delBtn.className='text-xs text-red-500 hover:underline';
+        delBtn.textContent='Hapus Thread';
+        delBtn.onclick=function(){if(confirm('Hapus thread ini?'))fetch('/api/forum/threads/'+t.id,{method:'DELETE',credentials:'include'}).then(function(){showThreads();});};
+        adminRow.appendChild(stickyBtn);adminRow.appendChild(lockBtn);adminRow.appendChild(delBtn);
+        op.appendChild(adminRow);
+      }
+
+      // Replies
+      var repliesEl=document.getElementById('thread-replies');repliesEl.innerHTML='';
+      if(replies.length){
+        var countEl=document.createElement('p');countEl.className='text-xs text-stone-400 mb-2';countEl.textContent=replies.length+' balasan';repliesEl.appendChild(countEl);
+      }
+      replies.forEach(function(r,idx){
+        var card=document.createElement('div');card.id='reply-'+r.id;
+        card.className='bg-white rounded-xl shadow-sm p-4';
+        var rmeta=document.createElement('div');rmeta.className='flex items-center justify-between mb-2';
+        var rauthor=document.createElement('span');rauthor.className='text-xs font-semibold text-stone-600';
+        rauthor.textContent=(r.author_nick||r.author_name||'Anonim')+' · '+timeAgo(r.created_at);
+        rmeta.appendChild(rauthor);
+        if(isAdmin){
+          var rdelBtn=document.createElement('button');rdelBtn.className='text-xs text-red-400 hover:underline';
+          rdelBtn.textContent='Hapus';
+          rdelBtn.onclick=function(){if(confirm('Hapus reply ini?'))fetch('/api/forum/replies/'+r.id,{method:'DELETE',credentials:'include'}).then(function(){loadThread(id);});};
+          rmeta.appendChild(rdelBtn);
+        }
+        card.appendChild(rmeta);
+        var rbody=document.createElement('div');rbody.className='text-stone-700 text-sm leading-relaxed whitespace-pre-wrap';
+        rbody.textContent=r.body;card.appendChild(rbody);
+        card.appendChild(buildReactions(r.reactions||[], null, r.id));
+        repliesEl.appendChild(card);
+      });
+
+      // Reply form / locked / login notice
+      document.getElementById('reply-section').classList.add('hidden');
+      document.getElementById('locked-notice').classList.add('hidden');
+      document.getElementById('login-notice').classList.add('hidden');
+      document.getElementById('reply-msg').textContent='';
+      document.getElementById('reply-body').value='';
+      if(t.is_locked){document.getElementById('locked-notice').classList.remove('hidden');}
+      else if(isApproved){document.getElementById('reply-section').classList.remove('hidden');}
+      else{document.getElementById('login-notice').classList.remove('hidden');}
+    });
+  }
+
+  function submitReply(){
+    var body=document.getElementById('reply-body').value.trim();
+    var msg=document.getElementById('reply-msg');
+    if(!body){msg.textContent='Tulis balasanmu dulu';return;}
+    msg.textContent='Mengirim...';
+    fetch('/api/forum/threads/'+currentThreadId+'/replies',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({body:body})})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.success){document.getElementById('reply-body').value='';msg.textContent='';loadThread(currentThreadId);}
+        else{msg.textContent=d.error||'Gagal mengirim';}
+      }).catch(function(){msg.textContent='Gagal mengirim';});
+  }
+
+  function toggleSticky(id){
+    fetch('/api/forum/threads/'+id+'/sticky',{method:'PUT',credentials:'include'}).then(function(r){return r.json()}).then(function(){loadThread(id);});
+  }
+  function toggleLock(id){
+    fetch('/api/forum/threads/'+id+'/lock',{method:'PUT',credentials:'include'}).then(function(r){return r.json()}).then(function(){loadThread(id);});
+  }
+
+  // ── Reactions ───────────────────────────────────────────────────────────────
+
+  function buildReactions(reactions, threadId, replyId){
+    var wrap=document.createElement('div');wrap.className='flex items-center gap-1 flex-wrap mt-3';
+    // Existing reactions
+    reactions.forEach(function(rx){
+      var btn=document.createElement('button');
+      btn.className='flex items-center gap-1 px-2 py-1 rounded-full text-xs border transition '+(rx.reacted?'bg-amber-100 border-amber-400 text-amber-800':'bg-stone-50 border-stone-200 text-stone-600 hover:border-amber-300');
+      btn.innerHTML=rx.emoji+' <span>'+rx.count+'</span>';
+      btn.onclick=function(){if(isApproved)toggleReaction(threadId,replyId,rx.emoji);};
+      wrap.appendChild(btn);
+    });
+    // Add-reaction button (only if approved)
+    if(isApproved){
+      var existingEmoji=reactions.map(function(r){return r.emoji;});
+      var remaining=EMOJIS.filter(function(e){return !existingEmoji.includes(e);});
+      if(remaining.length){
+        var addBtn=document.createElement('button');
+        addBtn.className='px-2 py-1 rounded-full text-xs border border-stone-200 text-stone-400 hover:border-amber-300 transition';
+        addBtn.textContent='+ 😊';
+        addBtn.onclick=function(e){
+          e.stopPropagation();
+          var picker=document.createElement('div');
+          picker.className='flex gap-1 bg-white border border-stone-200 rounded-xl shadow-lg px-2 py-1 absolute z-20';
+          picker.style.cssText='position:absolute;bottom:30px;left:0';
+          remaining.forEach(function(em){
+            var eb=document.createElement('button');eb.textContent=em;eb.className='text-xl p-1 hover:scale-125 transition-transform';
+            eb.onclick=function(){picker.remove();toggleReaction(threadId,replyId,em);};
+            picker.appendChild(eb);
+          });
+          wrap.style.position='relative';
+          wrap.appendChild(picker);
+          setTimeout(function(){document.addEventListener('click',function rm(){picker.remove();document.removeEventListener('click',rm);},{once:true});},10);
+        };
+        wrap.appendChild(addBtn);
+      }
+    }
+    return wrap;
+  }
+
+  function toggleReaction(threadId, replyId, emoji){
+    fetch('/api/forum/react',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body:JSON.stringify({thread_id:threadId||undefined,reply_id:replyId||undefined,emoji:emoji})})
+      .then(function(){loadThread(currentThreadId);});
+  }
+
+  // ── Time helper ─────────────────────────────────────────────────────────────
+
+  function timeAgo(str){
+    if(!str)return'';
+    var d=new Date(str),now=new Date(),s=Math.floor((now-d)/1000);
+    if(s<60)return'baru saja';
+    if(s<3600)return Math.floor(s/60)+' menit lalu';
+    if(s<86400)return Math.floor(s/3600)+' jam lalu';
+    if(s<604800)return Math.floor(s/86400)+' hari lalu';
+    return d.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+  }
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+
+  loadCategories();
+
+  var params=new URLSearchParams(window.location.search);
+  if(params.get('thread')){
+    var tid=parseInt(params.get('thread'));
+    fetch('/api/forum/threads/'+tid).then(function(r){return r.ok?r.json():null}).then(function(d){
+      if(!d)return;
+      fetch('/api/forum/categories/'+d.thread.category_id+'/threads').then(function(r){return r.json()}).then(function(cat){
+        openCategory(cat.category.id,cat.category.name,cat.category.description||'',cat.category.icon);
+        openThread(tid);
+      });
+    });
+  }else if(params.get('category')){
+    var cid=parseInt(params.get('category'));
+    fetch('/api/forum/categories/'+cid+'/threads').then(function(r){return r.ok?r.json():null}).then(function(d){
+      if(d&&d.category)openCategory(d.category.id,d.category.name,d.category.description||'',d.category.icon);
+    });
+  }
+</script>

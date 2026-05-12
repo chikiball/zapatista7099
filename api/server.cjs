@@ -1146,6 +1146,288 @@ app.put("/api/gallery/folders/:id/layout", adminMiddleware, (req, res) => {
   res.json({ success: true });
 });
 
+// ── Forum ────────────────────────────────────────────
+db.exec(`CREATE TABLE IF NOT EXISTS forum_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL, description TEXT, icon TEXT DEFAULT '💬',
+  sort_order INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS forum_threads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category_id INTEGER NOT NULL REFERENCES forum_categories(id),
+  author_id INTEGER REFERENCES alumni(id),
+  title TEXT NOT NULL, body TEXT NOT NULL,
+  is_sticky INTEGER DEFAULT 0, is_locked INTEGER DEFAULT 0, view_count INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS forum_replies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id INTEGER NOT NULL REFERENCES forum_threads(id) ON DELETE CASCADE,
+  author_id INTEGER REFERENCES alumni(id),
+  body TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS forum_reactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id INTEGER REFERENCES forum_threads(id) ON DELETE CASCADE,
+  reply_id INTEGER REFERENCES forum_replies(id) ON DELETE CASCADE,
+  alumni_id INTEGER NOT NULL REFERENCES alumni(id), emoji TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(thread_id, reply_id, alumni_id, emoji)
+)`);
+
+// Seed default categories + sticky how-to posts once
+if (!db.prepare("SELECT id FROM forum_categories LIMIT 1").get()) {
+  const cats = [
+    { name: "Pengumuman", description: "Info resmi dan pengumuman dari admin", icon: "📌", sort: 0 },
+    { name: "Obrolan",    description: "Ngobrol bebas — topik apapun boleh",   icon: "💬", sort: 1 },
+    { name: "Reuni & Acara", description: "Rencanain ketemu dan acara bareng",  icon: "🎉", sort: 2 },
+    { name: "Bantuan & Karir", description: "Cari kerja, koneksi, atau minta saran", icon: "💼", sort: 3 },
+    { name: "Kenangan 7099",   description: "Foto jadul, cerita SMA, nostalgia",    icon: "📸", sort: 4 },
+  ];
+  const insC = db.prepare("INSERT INTO forum_categories (name,description,icon,sort_order) VALUES (?,?,?,?)");
+  cats.forEach(c => insC.run(c.name, c.description, c.icon, c.sort));
+  const pengId = db.prepare("SELECT id FROM forum_categories WHERE name='Pengumuman'").get().id;
+  const insT = db.prepare("INSERT INTO forum_threads (category_id,author_id,title,body,is_sticky) VALUES (?,NULL,?,?,1)");
+  insT.run(pengId, "📖 Cara Menggunakan Forum Ini",
+`Selamat datang di Forum 7099! 👋
+
+Forum ini adalah tempat kita ngobrol, berbagi cerita, dan saling bantu sesama alumni SMAN 70 Angkatan 99.
+
+📌 KATEGORI
+• Pengumuman – Info resmi dari admin
+• Obrolan – Ngobrol bebas, apapun topiknya
+• Reuni & Acara – Rencanain ketemu bareng
+• Bantuan & Karir – Cari kerja, koneksi, atau minta saran
+• Kenangan 7099 – Foto jadul, cerita SMA, nostalgia
+
+✍️ CARA BUAT THREAD BARU
+1. Pilih kategori yang sesuai
+2. Klik tombol "+ Thread Baru"
+3. Tulis judul yang jelas dan isi postingan lengkap
+4. Klik Kirim
+
+💬 CARA REPLY
+Buka sebuah thread, scroll ke bawah, tulis balasanmu di kolom reply dan klik Kirim.
+
+@MENTION
+Mention teman dengan nulis @nickname mereka di postingan atau reply. Mereka akan dapat notifikasi email otomatis!
+
+❤️ REAKSI
+Klik salah satu emoji (❤️ 👍 😂 🎉 😮) di bawah postingan atau reply untuk kasih reaksi tanpa perlu nulis komentar.
+
+Selamat ngobrol dan reconnect! 🎉`);
+  insT.run(pengId, "📜 Aturan & Etika Komunitas 7099",
+`Supaya forum ini nyaman buat semua, tolong ikuti aturan berikut:
+
+✅ BOLEH
+• Berbagi cerita, pengalaman, dan tips
+• Minta saran, bantuan, atau referensi
+• Promosi usaha dengan sopan di kategori yang tepat
+• Berbagi foto atau kenangan SMA
+• Berdiskusi dengan santun meski beda pendapat
+
+❌ TIDAK BOLEH
+• SARA, ujaran kebencian, atau konten ofensif
+• Spam atau iklan berlebihan
+• Menyebarkan informasi palsu atau hoaks
+• Memposting konten pribadi orang lain tanpa izin
+• Bahasa kasar atau menyerang pribadi
+
+🔧 PELANGGARAN
+Postingan yang melanggar aturan akan dihapus oleh admin. Pelanggaran berulang dapat berakibat pada pembatasan akun.
+
+Inget, kita semua alumni yang sama — jaga nama baik 7099! 💪`);
+}
+
+// Helper — send targeted email to one address
+function sendForumEmail(toEmail, subject, html) {
+  if (!toEmail) return;
+  sendEmail(toEmail, subject, html);
+}
+
+// Helper — parse @mentions from body, return matched alumni emails (excluding excludeAlumniId)
+function getMentionedEmails(body, excludeAlumniId) {
+  var mentions = (body.match(/@(\w+)/g) || []).map(m => m.slice(1));
+  if (!mentions.length) return [];
+  var emails = [];
+  mentions.forEach(function(nick) {
+    var row = db.prepare(`SELECT u.email FROM alumni al JOIN users u ON u.alumni_id=al.id
+      WHERE (LOWER(al.nickname)=LOWER(?) OR LOWER(al.name)=LOWER(?)) AND al.id!=? AND u.email IS NOT NULL LIMIT 1`)
+      .get(nick, nick, excludeAlumniId || 0);
+    if (row && row.email && !emails.includes(row.email)) emails.push(row.email);
+  });
+  return emails;
+}
+
+// GET /api/forum/categories
+app.get("/api/forum/categories", (req, res) => {
+  const cats = db.prepare("SELECT * FROM forum_categories ORDER BY sort_order").all();
+  const result = cats.map(c => {
+    const threadCount = db.prepare("SELECT COUNT(*) as n FROM forum_threads WHERE category_id=?").get(c.id).n;
+    const last = db.prepare(`SELECT t.updated_at, al.name as author_name, al.nickname as author_nick
+      FROM forum_threads t LEFT JOIN alumni al ON t.author_id=al.id
+      WHERE t.category_id=? ORDER BY t.updated_at DESC LIMIT 1`).get(c.id);
+    return { ...c, thread_count: threadCount, last_activity: last ? last.updated_at : null, last_author: last ? (last.author_nick || last.author_name) : null };
+  });
+  res.json(result);
+});
+
+// GET /api/forum/categories/:id/threads
+app.get("/api/forum/categories/:id/threads", (req, res) => {
+  const cat = db.prepare("SELECT * FROM forum_categories WHERE id=?").get(req.params.id);
+  if (!cat) return res.status(404).json({ error: "Not found" });
+  const threads = db.prepare(`SELECT t.*, al.name as author_name, al.nickname as author_nick,
+    (SELECT COUNT(*) FROM forum_replies r WHERE r.thread_id=t.id) as reply_count,
+    (SELECT MAX(r.created_at) FROM forum_replies r WHERE r.thread_id=t.id) as last_reply_at
+    FROM forum_threads t LEFT JOIN alumni al ON t.author_id=al.id
+    WHERE t.category_id=? ORDER BY t.is_sticky DESC, COALESCE((SELECT MAX(r.created_at) FROM forum_replies r WHERE r.thread_id=t.id), t.created_at) DESC`).all(req.params.id);
+  res.json({ category: cat, threads });
+});
+
+// GET /api/forum/threads/:id
+app.get("/api/forum/threads/:id", (req, res) => {
+  const thread = db.prepare(`SELECT t.*, al.name as author_name, al.nickname as author_nick
+    FROM forum_threads t LEFT JOIN alumni al ON t.author_id=al.id WHERE t.id=?`).get(req.params.id);
+  if (!thread) return res.status(404).json({ error: "Not found" });
+  db.prepare("UPDATE forum_threads SET view_count=view_count+1 WHERE id=?").run(req.params.id);
+  const replies = db.prepare(`SELECT r.*, al.name as author_name, al.nickname as author_nick
+    FROM forum_replies r LEFT JOIN alumni al ON r.author_id=al.id WHERE r.thread_id=? ORDER BY r.created_at ASC`).all(req.params.id);
+
+  // Get current user alumni_id for reaction "reacted" flag
+  var myAlumniId = 0;
+  try {
+    const token = req.cookies.token || (req.headers.authorization || "").replace("Bearer ", "");
+    if (token) { const u = jwt.verify(token, JWT_SECRET); const row = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(u.id); if (row) myAlumniId = row.alumni_id || 0; }
+  } catch(e) {}
+
+  function getReactions(threadId, replyId) {
+    const rows = db.prepare("SELECT emoji, COUNT(*) as cnt, MAX(CASE WHEN alumni_id=? THEN 1 ELSE 0 END) as reacted FROM forum_reactions WHERE thread_id IS ? AND reply_id IS ? GROUP BY emoji")
+      .all(myAlumniId, threadId, replyId);
+    return rows.map(r => ({ emoji: r.emoji, count: r.cnt, reacted: r.reacted === 1 }));
+  }
+  thread.reactions = getReactions(thread.id, null);
+  replies.forEach(r => { r.reactions = getReactions(null, r.id); });
+  res.json({ thread, replies });
+});
+
+// POST /api/forum/threads
+app.post("/api/forum/threads", approvedMiddleware, (req, res) => {
+  const { category_id, title, body } = req.body;
+  if (!category_id || !title || !body) return res.status(400).json({ error: "category_id, title, body required" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  const now = new Date().toISOString();
+  const result = db.prepare("INSERT INTO forum_threads (category_id,author_id,title,body,created_at,updated_at) VALUES (?,?,?,?,?,?)")
+    .run(category_id, user ? user.alumni_id : null, title.trim(), body.trim(), now, now);
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+// PUT /api/forum/threads/:id
+app.put("/api/forum/threads/:id", approvedMiddleware, (req, res) => {
+  const thread = db.prepare("SELECT * FROM forum_threads WHERE id=?").get(req.params.id);
+  if (!thread) return res.status(404).json({ error: "Not found" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  if (thread.author_id !== (user && user.alumni_id) && req.user.role !== "admin") return res.status(403).json({ error: "Forbidden" });
+  const { title, body } = req.body;
+  db.prepare("UPDATE forum_threads SET title=?,body=?,updated_at=? WHERE id=?").run(title || thread.title, body || thread.body, new Date().toISOString(), req.params.id);
+  res.json({ success: true });
+});
+
+// DELETE /api/forum/threads/:id (admin only)
+app.delete("/api/forum/threads/:id", adminMiddleware, (req, res) => {
+  db.prepare("DELETE FROM forum_threads WHERE id=?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// PUT /api/forum/threads/:id/sticky (admin)
+app.put("/api/forum/threads/:id/sticky", adminMiddleware, (req, res) => {
+  const t = db.prepare("SELECT is_sticky FROM forum_threads WHERE id=?").get(req.params.id);
+  if (!t) return res.status(404).json({ error: "Not found" });
+  db.prepare("UPDATE forum_threads SET is_sticky=? WHERE id=?").run(t.is_sticky ? 0 : 1, req.params.id);
+  res.json({ success: true, is_sticky: !t.is_sticky });
+});
+
+// PUT /api/forum/threads/:id/lock (admin)
+app.put("/api/forum/threads/:id/lock", adminMiddleware, (req, res) => {
+  const t = db.prepare("SELECT is_locked FROM forum_threads WHERE id=?").get(req.params.id);
+  if (!t) return res.status(404).json({ error: "Not found" });
+  db.prepare("UPDATE forum_threads SET is_locked=? WHERE id=?").run(t.is_locked ? 0 : 1, req.params.id);
+  res.json({ success: true, is_locked: !t.is_locked });
+});
+
+// POST /api/forum/threads/:id/replies
+app.post("/api/forum/threads/:id/replies", approvedMiddleware, (req, res) => {
+  const thread = db.prepare("SELECT * FROM forum_threads WHERE id=?").get(req.params.id);
+  if (!thread) return res.status(404).json({ error: "Not found" });
+  if (thread.is_locked) return res.status(403).json({ error: "Thread is locked" });
+  const { body } = req.body;
+  if (!body || !body.trim()) return res.status(400).json({ error: "Body required" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  const alumniId = user ? user.alumni_id : null;
+  const now = new Date().toISOString();
+  const result = db.prepare("INSERT INTO forum_replies (thread_id,author_id,body,created_at,updated_at) VALUES (?,?,?,?,?)")
+    .run(thread.id, alumniId, body.trim(), now, now);
+  db.prepare("UPDATE forum_threads SET updated_at=? WHERE id=?").run(now, thread.id);
+
+  // Notify thread author (if not self)
+  if (thread.author_id && thread.author_id !== alumniId) {
+    const authorUser = db.prepare("SELECT u.email, al.nickname, al.name FROM users u JOIN alumni al ON u.alumni_id=al.id WHERE al.id=?").get(thread.author_id);
+    if (authorUser && authorUser.email) {
+      const replier = alumniId ? db.prepare("SELECT nickname, name FROM alumni WHERE id=?").get(alumniId) : null;
+      const replierName = replier ? (replier.nickname || replier.name) : "Seseorang";
+      sendForumEmail(authorUser.email, "Reply baru di forum 7099",
+        emailTemplate("Ada reply baru! 💬", "<b>" + replierName + "</b> membalas thread kamu:<br><br><b>" + thread.title + "</b><br><br><span style='color:#57534e'>" + body.trim().substring(0, 200) + (body.length > 200 ? "..." : "") + "</span>", "Lihat Thread", "https://zapa.inweb.id/forum?thread=" + thread.id));
+    }
+  }
+  // Notify @mentions
+  const mentionEmails = getMentionedEmails(body, alumniId);
+  const mentioner = alumniId ? db.prepare("SELECT nickname, name FROM alumni WHERE id=?").get(alumniId) : null;
+  const mentionerName = mentioner ? (mentioner.nickname || mentioner.name) : "Seseorang";
+  mentionEmails.forEach(email => {
+    sendForumEmail(email, "Kamu di-mention di forum 7099",
+      emailTemplate("Kamu di-mention! 👋", "<b>" + mentionerName + "</b> menyebut kamu di forum:<br><br><b>" + thread.title + "</b><br><br><span style='color:#57534e'>" + body.trim().substring(0, 200) + (body.length > 200 ? "..." : "") + "</span>", "Lihat Thread", "https://zapa.inweb.id/forum?thread=" + thread.id));
+  });
+
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+// PUT /api/forum/replies/:id
+app.put("/api/forum/replies/:id", approvedMiddleware, (req, res) => {
+  const reply = db.prepare("SELECT * FROM forum_replies WHERE id=?").get(req.params.id);
+  if (!reply) return res.status(404).json({ error: "Not found" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  if (reply.author_id !== (user && user.alumni_id) && req.user.role !== "admin") return res.status(403).json({ error: "Forbidden" });
+  const { body } = req.body;
+  if (!body || !body.trim()) return res.status(400).json({ error: "Body required" });
+  db.prepare("UPDATE forum_replies SET body=?,updated_at=? WHERE id=?").run(body.trim(), new Date().toISOString(), req.params.id);
+  res.json({ success: true });
+});
+
+// DELETE /api/forum/replies/:id (admin)
+app.delete("/api/forum/replies/:id", adminMiddleware, (req, res) => {
+  db.prepare("DELETE FROM forum_replies WHERE id=?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// POST /api/forum/react — toggle reaction
+app.post("/api/forum/react", approvedMiddleware, (req, res) => {
+  const { thread_id, reply_id, emoji } = req.body;
+  const validEmoji = ["❤️","👍","😂","🎉","😮"];
+  if (!validEmoji.includes(emoji)) return res.status(400).json({ error: "Invalid emoji" });
+  if (!thread_id && !reply_id) return res.status(400).json({ error: "thread_id or reply_id required" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  if (!user || !user.alumni_id) return res.status(400).json({ error: "No profile" });
+  const tid = thread_id || null, rid = reply_id || null;
+  const existing = db.prepare("SELECT id FROM forum_reactions WHERE thread_id IS ? AND reply_id IS ? AND alumni_id=? AND emoji=?").get(tid, rid, user.alumni_id, emoji);
+  if (existing) {
+    db.prepare("DELETE FROM forum_reactions WHERE id=?").run(existing.id);
+    res.json({ success: true, action: "removed" });
+  } else {
+    db.prepare("INSERT INTO forum_reactions (thread_id,reply_id,alumni_id,emoji) VALUES (?,?,?,?)").run(tid, rid, user.alumni_id, emoji);
+    res.json({ success: true, action: "added" });
+  }
+});
+
 // ── Start ───────────────────────────────────────────
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`Alumni API running on port ${PORT}`);
