@@ -27,6 +27,7 @@ import Layout from "../layouts/Layout.astro";
       <div id="read-meta" class="text-sm text-stone-500 mb-6"></div>
       <div id="read-body" class="text-stone-700 leading-relaxed"></div>
       <div id="read-gallery" class="mt-6"></div>
+      <div id="read-videos" class="mt-6"></div>
       <div id="read-actions" class="hidden mt-6 pt-4 border-t flex gap-3">
         <button type="button" onclick="editArticle()" class="text-sm text-amber-700 hover:underline">Edit</button>
         <button type="button" onclick="deleteArticle()" class="text-sm text-red-500 hover:underline">Hapus</button>
@@ -94,6 +95,11 @@ import Layout from "../layouts/Layout.astro";
     while(m=re.exec(content||''))r.push(m[1].trim());
     return r;
   }
+  function getVideos(content){
+    var m,r=[],re=/\[video:\s*([^\]]+)\]/g;
+    while(m=re.exec(content||''))r.push(m[1].trim());
+    return r;
+  }
   function getCover(a){
     if(a.cover_image)return '/photos/'+a.cover_image;
     var p=getPhotos(a.content);
@@ -110,7 +116,7 @@ import Layout from "../layouts/Layout.astro";
       list.forEach(function(a,i){
         var cover=getCover(a);
         var photos=getPhotos(a.content);
-        var preview=(a.content||'').replace(/\[foto:[^\]]+\]/g,'').replace(/---\nOriginal:.*$/,'').trim().substring(0,120);
+        var preview=(a.content||'').replace(/\[foto:[^\]]+\]/g,'').replace(/\[video:[^\]]+\]/g,'').replace(/---\nOriginal:.*$/,'').trim().substring(0,120);
         var date=a.published_at?timeAgo(a.published_at):'';
         var author=(a.author_name||'Anonim')+(a.author_nick?' ('+a.author_nick+')':'');
         var badge=photos.length>0?String.fromCharCode(60)+'span class="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full"'+String.fromCharCode(62)+'📷 '+photos.length+String.fromCharCode(60)+'/span'+String.fromCharCode(62):'';
@@ -166,8 +172,8 @@ import Layout from "../layouts/Layout.astro";
         document.getElementById('read-cover').appendChild(cImg);
       }else{document.getElementById('read-cover').innerHTML=''}
 
-      // Body text (without [foto:] tags)
-      var bodyText=(a.content||'').replace(/\[foto:\s*[^\]]+\]/g,'');
+      // Body text (without [foto:] and [video:] tags)
+      var bodyText=(a.content||'').replace(/\[foto:\s*[^\]]+\]/g,'').replace(/\[video:\s*[^\]]+\]/g,'');
       var safeDiv=document.createElement('div');
       safeDiv.textContent=bodyText;
       var safe=safeDiv.innerHTML;
@@ -179,8 +185,9 @@ import Layout from "../layouts/Layout.astro";
       document.getElementById('read-body').innerHTML=safe;
 
       // Photo gallery
-      var allPhotos=getPhotos(a.content);
-      if(a.cover_image)allPhotos.unshift('/photos/'+a.cover_image);
+      var rawPhotos=getPhotos(a.content).map(function(f){return f.startsWith('/')?f:'/photos/'+f;});
+      var coverUrl=a.cover_image?'/photos/'+a.cover_image:null;
+      var allPhotos=coverUrl?[coverUrl].concat(rawPhotos.filter(function(f){return f!==coverUrl;})):rawPhotos;
       var gallery=document.getElementById('read-gallery');
       gallery.innerHTML='';
 
@@ -207,6 +214,21 @@ import Layout from "../layouts/Layout.astro";
         gallery.appendChild(label);
       }else if(allPhotos.length===1&&!a.cover_image){
         // Single photo already shown as cover
+      }
+
+      // Video section
+      var allVideos=getVideos(a.content);
+      var vContainer=document.getElementById('read-videos');
+      vContainer.innerHTML='';
+      if(allVideos.length){
+        allVideos.forEach(function(filename){
+          var vid=document.createElement('video');
+          vid.src='/photos/'+filename;
+          vid.controls=true;
+          vid.className='w-full rounded-xl mb-4';
+          vid.style.cssText='background:#000;max-height:480px';
+          vContainer.appendChild(vid);
+        });
       }
 
       // Actions

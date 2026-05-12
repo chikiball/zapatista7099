@@ -72,6 +72,24 @@ try { db.exec("ALTER TABLE users ADD COLUMN notify_email INTEGER DEFAULT 1"); } 
 try { db.exec("ALTER TABLE users ADD COLUMN unsubscribe_token TEXT"); } catch(e) {}
 db.prepare("UPDATE users SET unsubscribe_token = lower(hex(randomblob(20))) WHERE unsubscribe_token IS NULL").run();
 
+// Gallery tables
+db.exec(`CREATE TABLE IF NOT EXISTS gallery_folders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  description TEXT,
+  created_by INTEGER REFERENCES alumni(id),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+try { db.exec("ALTER TABLE gallery_folders ADD COLUMN default_layout TEXT DEFAULT 'magazine'"); } catch(e) {}
+db.exec(`CREATE TABLE IF NOT EXISTS gallery_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  folder_id INTEGER NOT NULL REFERENCES gallery_folders(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  caption TEXT,
+  uploaded_by INTEGER REFERENCES alumni(id),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+
 // Telegram notification
 function sendTelegram(text) {
   try {
@@ -1044,6 +1062,87 @@ app.post("/api/admin/email-test", adminMiddleware, (req, res) => {
 
 app.post("/api/admin/telegram-test", adminMiddleware, (req, res) => {
   sendTelegram("🔔 <b>Test Notification</b>\nBot 7099 Alumni is working!\n👉 https://zapa.inweb.id/admin");
+  res.json({ success: true });
+});
+
+// ── Gallery ─────────────────────────────────────────
+// GET /api/gallery/folders — list all folders with photo count + 4 random preview filenames
+app.get("/api/gallery/folders", (req, res) => {
+  const folders = db.prepare("SELECT * FROM gallery_folders ORDER BY created_at ASC").all();
+  const result = folders.map(f => {
+    const count = db.prepare("SELECT COUNT(*) as c FROM gallery_photos WHERE folder_id=?").get(f.id).c;
+    const previews = db.prepare("SELECT filename FROM gallery_photos WHERE folder_id=? ORDER BY RANDOM() LIMIT 4").all(f.id).map(r => r.filename);
+    return { ...f, count, previews };
+  });
+  res.json(result);
+});
+
+// GET /api/gallery/folders/:id — list all photos in a folder
+app.get("/api/gallery/folders/:id", (req, res) => {
+  const folder = db.prepare("SELECT * FROM gallery_folders WHERE id=?").get(req.params.id);
+  if (!folder) return res.status(404).json({ error: "Not found" });
+  const photos = db.prepare("SELECT * FROM gallery_photos WHERE folder_id=? ORDER BY created_at ASC").all(req.params.id);
+  res.json({ folder, photos });
+});
+
+// POST /api/gallery/folders — create a new folder (approved users)
+app.post("/api/gallery/folders", approvedMiddleware, (req, res) => {
+  const { name, description } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "Name required" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  const result = db.prepare("INSERT INTO gallery_folders (name, description, created_by) VALUES (?,?,?)").run(name.trim(), description || null, user ? user.alumni_id : null);
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+// POST /api/gallery/folders/:id/photos — upload photos to a folder (approved users)
+app.post("/api/gallery/folders/:id/photos", approvedMiddleware, upload.array("photos", 20), async (req, res) => {
+  const folder = db.prepare("SELECT * FROM gallery_folders WHERE id=?").get(req.params.id);
+  if (!folder) return res.status(404).json({ error: "Folder not found" });
+  if (!req.files || !req.files.length) return res.status(400).json({ error: "No files" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  const alumniId = user ? user.alumni_id : null;
+  const inserted = [];
+  for (const file of req.files) {
+    try {
+      const outName = "gallery-" + Date.now() + "-" + Math.random().toString(36).substr(2,6) + ".jpg";
+      const outPath = path.join(__dirname, "..", "public", "photos", outName);
+      await sharp(file.path).resize(1200, null, { withoutEnlargement: true, fit: "inside" }).jpeg({ quality: 82 }).toFile(outPath);
+      try { fs.unlinkSync(file.path); } catch(e) {}
+      const caption = (req.body.caption && typeof req.body.caption === "string") ? req.body.caption : null;
+      db.prepare("INSERT INTO gallery_photos (folder_id, filename, caption, uploaded_by) VALUES (?,?,?,?)").run(folder.id, outName, caption, alumniId);
+      inserted.push(outName);
+    } catch(e) {
+      console.error("Gallery upload error:", e.message);
+    }
+  }
+  res.json({ success: true, uploaded: inserted.length });
+});
+
+// DELETE /api/gallery/folders/:id — delete folder + all its photos (admin only)
+app.delete("/api/gallery/folders/:id", adminMiddleware, (req, res) => {
+  const photos = db.prepare("SELECT filename FROM gallery_photos WHERE folder_id=?").all(req.params.id);
+  photos.forEach(p => {
+    try { fs.unlinkSync(path.join(__dirname, "..", "public", "photos", p.filename)); } catch(e) {}
+  });
+  db.prepare("DELETE FROM gallery_folders WHERE id=?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// DELETE /api/gallery/photos/:id — delete single photo (admin only)
+app.delete("/api/gallery/photos/:id", adminMiddleware, (req, res) => {
+  const photo = db.prepare("SELECT * FROM gallery_photos WHERE id=?").get(req.params.id);
+  if (!photo) return res.status(404).json({ error: "Not found" });
+  try { fs.unlinkSync(path.join(__dirname, "..", "public", "photos", photo.filename)); } catch(e) {}
+  db.prepare("DELETE FROM gallery_photos WHERE id=?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// PUT /api/gallery/folders/:id/layout — save default layout for folder (admin only)
+app.put("/api/gallery/folders/:id/layout", adminMiddleware, (req, res) => {
+  const valid = ['polaroid','magazine','filmstrip','feed','slideshow','yearbook'];
+  const { layout } = req.body;
+  if (!valid.includes(layout)) return res.status(400).json({ error: "Invalid layout" });
+  db.prepare("UPDATE gallery_folders SET default_layout=? WHERE id=?").run(layout, req.params.id);
   res.json({ success: true });
 });
 

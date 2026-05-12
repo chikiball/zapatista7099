@@ -1,0 +1,10 @@
+{
+  "name": "zapatista-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "sharp": "^0.34.5"
+  }
+}

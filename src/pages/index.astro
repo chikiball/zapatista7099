@@ -18,6 +18,7 @@ import Layout from "../layouts/Layout.astro";
         <li><a href="/map" class="hover:text-amber-800">Map</a></li>
         <li><a href="/articles" class="hover:text-amber-800">Articles</a></li>
         <li><a href="/events" class="hover:text-amber-800">Events</a></li>
+        <li><a href="/gallery" class="hover:text-amber-800">Gallery</a></li>
         <li><a href="/login" class="text-amber-700 font-semibold hover:text-amber-900">Masuk</a></li>
       </ul>
     </div>
@@ -27,8 +28,8 @@ import Layout from "../layouts/Layout.astro";
       <a href="/directory" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Directory</a>
       <a href="/map" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Map</a>
       <a href="/articles" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Articles</a>
-      <a href="/stats" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Statistics</a>
       <a href="/events" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Events</a>
+      <a href="/gallery" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Gallery</a>
       <a href="/login" class="block py-2 text-sm text-amber-700 font-semibold">Masuk / Daftar</a>
     </div>
   </nav>
@@ -74,22 +75,22 @@ import Layout from "../layouts/Layout.astro";
   <section class="bg-white py-16 px-4">
     <div class="max-w-6xl mx-auto">
       <h3 class="text-2xl font-bold text-center mb-12">Yang Ada di Sini</h3>
-      <div class="grid md:grid-cols-3 gap-8">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
         <a href="/map" class="text-center p-6 block hover:bg-amber-50 rounded-xl transition">
           <img src="/peta_interaktif.png" alt="Peta Interaktif" class="mx-auto mb-4" style="max-height:120px;width:auto">
           <p class="text-gray-600 text-sm">Lihat dimana teman-teman kita berada sekarang</p>
-          
-          
         </a>
         <a href="/stats" class="text-center p-6 block hover:bg-amber-50 rounded-xl transition">
           <img src="/statistik_kelas.png" alt="Statistik Angkatan" class="mx-auto mb-4" style="max-height:120px;width:auto">
           <p class="text-gray-600 text-sm">Profesi, kota, dan data menarik tentang angkatan kita</p>
-          
-          
         </a>
         <a href="/articles" class="text-center p-6 block hover:bg-amber-50 rounded-xl transition">
           <img src="/cerita_artikel.png" alt="Cerita &amp; Artikel" class="mx-auto mb-4" style="max-height:120px;width:auto">
           <p class="text-gray-600 text-sm">Bagikan perjalananmu dan baca cerita teman-teman</p>
+        </a>
+        <a href="/gallery" class="text-center p-6 block hover:bg-amber-50 rounded-xl transition">
+          <img src="/galeri_foto.png" alt="Galeri Foto" class="mx-auto mb-4" style="max-height:120px;width:auto">
+          <p class="text-gray-600 text-sm">Jelajahi koleksi foto kenangan angkatan kita</p>
         </a>
       </div>
     </div>

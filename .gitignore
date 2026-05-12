@@ -4,3 +4,5 @@ dist/
 .DS_Store
 *.db
 .env
+insta_resource/
+yearbook_portraits/

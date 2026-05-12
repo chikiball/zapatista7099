@@ -1,0 +1,536 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Gallery - 7099">
+  <style>
+    .polaroid-card { transition: transform .25s, box-shadow .25s; }
+    .polaroid-card:hover { transform: rotate(0deg) scale(1.06) !important; box-shadow: 0 12px 32px rgba(0,0,0,0.22) !important; z-index: 2; }
+    #view-filmstrip { background: #0e0e0e; border-radius: 16px; padding: 20px 0; overflow: hidden; }
+    .film-frame { border: 2px solid #fff; border-radius: 4px; overflow: hidden; }
+    .film-frame img { width:100%; height:100%; object-fit:cover; display:block; transition:opacity .2s; }
+    .film-frame:hover img { opacity: .85; }
+    .sprocket { display:flex; flex-direction:column; gap:10px; justify-content:center; padding:0 8px; }
+    .sprocket-hole { width:12px; height:18px; background:#333; border-radius:3px; flex-shrink:0; }
+    #view-feed .feed-item img { transition: opacity .2s; }
+    #view-feed .feed-item:hover img { opacity: .92; }
+  </style>
+
+  <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="block"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    </div>
+  </nav>
+
+  <div class="max-w-5xl mx-auto px-4 py-6">
+
+    <!-- ── Folders view ── -->
+    <div id="v-folders">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-stone-800">Gallery</h2>
+        <button id="btn-new-folder" class="hidden bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900" onclick="showNewFolder()">+ New Folder</button>
+      </div>
+      <div id="new-folder-form" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+        <h3 class="font-semibold text-stone-800 mb-3">Create New Folder</h3>
+        <input type="text" id="nf-name" placeholder="Folder name..." maxlength="60" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm mb-2 focus:ring-2 focus:ring-amber-500 outline-none">
+        <input type="text" id="nf-desc" placeholder="Description (optional)..." class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm mb-3 focus:ring-2 focus:ring-amber-500 outline-none">
+        <div class="flex gap-2">
+          <button onclick="createFolder()" class="bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">Create</button>
+          <button onclick="hideNewFolder()" class="text-stone-500 text-sm px-3 py-2 hover:text-stone-800">Cancel</button>
+        </div>
+        <p id="nf-msg" class="hidden text-sm mt-2"></p>
+      </div>
+      <div id="folders-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"></div>
+      <p id="folders-empty" class="hidden text-center text-stone-400 py-16">No folders yet.</p>
+    </div>
+
+    <!-- ── Folder contents view ── -->
+    <div id="v-photos" class="hidden">
+      <div class="flex items-center gap-3 mb-1">
+        <button onclick="showFolders()" class="text-sm text-amber-700 hover:underline">&larr; All Folders</button>
+        <span class="text-stone-300">|</span>
+        <h2 id="folder-title" class="text-xl font-bold text-stone-800"></h2>
+      </div>
+      <p id="folder-desc" class="text-sm text-stone-500 mb-3"></p>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div class="flex items-center gap-3">
+          <span id="photo-count" class="text-xs text-stone-400 shrink-0"></span>
+          <!-- 6-layout toggle (admin only) -->
+          <div id="layout-toggle-bar" class="hidden flex items-center gap-1 bg-stone-100 rounded-xl p-1 flex-wrap">
+            <button id="tgl-polaroid"   onclick="changeLayout('polaroid')"   title="Polaroid"   class="layout-btn px-2 h-7 rounded-lg text-xs font-medium transition">📷</button>
+            <button id="tgl-magazine"   onclick="changeLayout('magazine')"   title="Magazine"   class="layout-btn px-2 h-7 rounded-lg text-xs font-medium transition">📰</button>
+            <button id="tgl-filmstrip"  onclick="changeLayout('filmstrip')"  title="Filmstrip"  class="layout-btn px-2 h-7 rounded-lg text-xs font-medium transition">🎞</button>
+            <button id="tgl-feed"       onclick="changeLayout('feed')"       title="Feed"       class="layout-btn px-2 h-7 rounded-lg text-xs font-medium transition">≡</button>
+            <button id="tgl-slideshow"  onclick="changeLayout('slideshow')"  title="Slideshow"  class="layout-btn px-2 h-7 rounded-lg text-xs font-medium transition">▶</button>
+            <button id="tgl-yearbook"   onclick="changeLayout('yearbook')"   title="Yearbook"   class="layout-btn px-2 h-7 rounded-lg text-xs font-medium transition">🎓</button>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button id="btn-upload" class="hidden bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900" onclick="showUpload()">+ Upload</button>
+          <button id="btn-del-folder" class="hidden bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700" onclick="deleteFolder()">Delete Folder</button>
+        </div>
+      </div>
+
+      <!-- Upload form -->
+      <div id="upload-form" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+        <h3 class="font-semibold text-stone-800 mb-3">Upload Photos</h3>
+        <input type="file" id="upload-files" multiple accept="image/*" class="block w-full text-sm text-stone-600 mb-2">
+        <input type="text" id="upload-caption" placeholder="Caption (optional, applies to all)..." class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm mb-3 focus:ring-2 focus:ring-amber-500 outline-none">
+        <div class="flex gap-2 items-center">
+          <button onclick="uploadPhotos()" class="bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">Upload</button>
+          <button onclick="hideUpload()" class="text-stone-500 text-sm px-3 py-2 hover:text-stone-800">Cancel</button>
+          <span id="upload-msg" class="text-sm text-stone-500 ml-2"></span>
+        </div>
+      </div>
+
+      <!-- ① Polaroid scatter -->
+      <div id="view-polaroid" class="hidden" style="background:#faf5ef;border-radius:16px;padding:24px 16px;min-height:200px"></div>
+
+      <!-- ② Magazine editorial -->
+      <div id="view-magazine" class="hidden">
+        <div id="mag-grid" style="display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:220px;gap:6px"></div>
+      </div>
+
+      <!-- ③ Filmstrip -->
+      <div id="view-filmstrip" class="hidden"></div>
+
+      <!-- ④ Instagram feed -->
+      <div id="view-feed" class="hidden" style="max-width:520px;margin:0 auto"></div>
+
+      <!-- ⑤ Slideshow -->
+      <div id="view-slideshow" class="hidden">
+        <div id="ss-hero-wrap" class="relative rounded-2xl overflow-hidden bg-stone-900 mb-3 select-none"
+             style="min-height:260px;max-height:66vh;display:flex;align-items:center;justify-content:center">
+          <img id="ss-hero" src="" alt="" onclick="openLB(ssIdx)"
+               style="max-height:66vh;max-width:100%;object-fit:contain;display:block;transition:opacity .22s">
+          <button onclick="ssPrev()" class="absolute left-0 top-0 bottom-0 flex items-center px-3 opacity-0 hover:opacity-100 transition-opacity" style="width:15%;background:linear-gradient(to right,rgba(0,0,0,.35),transparent)">
+            <span class="text-white text-4xl select-none">&#8249;</span></button>
+          <button onclick="ssNext()" class="absolute right-0 top-0 bottom-0 flex items-center justify-end px-3 opacity-0 hover:opacity-100 transition-opacity" style="width:15%;background:linear-gradient(to left,rgba(0,0,0,.35),transparent)">
+            <span class="text-white text-4xl select-none">&#8250;</span></button>
+          <button id="ss-del-btn" class="hidden absolute top-3 right-3 bg-red-600 text-white text-xs px-3 py-1 rounded-lg hover:bg-red-700" onclick="deleteSsCurrent()">Delete</button>
+        </div>
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <p id="ss-caption" class="text-sm text-stone-600 flex-1 leading-snug"></p>
+          <div class="flex items-center gap-3 shrink-0">
+            <button id="ss-play-btn" onclick="ssTogglePlay()" class="w-8 h-8 rounded-full flex items-center justify-center bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm transition">&#9654;</button>
+            <span id="ss-counter" class="text-xs text-stone-400 tabular-nums w-14 text-right"></span>
+          </div>
+        </div>
+        <div id="ss-thumbs" class="flex gap-2 overflow-x-auto pb-2" style="scrollbar-width:thin;scrollbar-color:#d6d3d1 transparent"></div>
+      </div>
+
+      <!-- ⑥ Yearbook grid -->
+      <div id="view-yearbook" class="hidden">
+        <div id="yb-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px"></div>
+      </div>
+
+      <p id="photos-empty" class="hidden text-center text-stone-400 py-16">No photos in this folder yet.</p>
+    </div>
+  </div>
+
+  <!-- Fullscreen Lightbox -->
+  <div id="lightbox" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.95)">
+    <button onclick="closeLB()" class="absolute top-4 right-4 text-white text-3xl leading-none z-10 opacity-70 hover:opacity-100">&times;</button>
+    <button onclick="lbPrev()" class="absolute left-3 text-white text-5xl px-3 py-6 z-10 opacity-50 hover:opacity-100">&#8249;</button>
+    <button onclick="lbNext()" class="absolute right-3 text-white text-5xl px-3 py-6 z-10 opacity-50 hover:opacity-100">&#8250;</button>
+    <div class="flex flex-col items-center max-w-5xl w-full px-16">
+      <img id="lb-img" src="" class="max-h-[85vh] max-w-full object-contain">
+      <div class="flex items-center justify-between w-full mt-3">
+        <p id="lb-caption" class="text-white/60 text-sm flex-1 text-center"></p>
+        <span id="lb-counter" class="text-white/40 text-xs ml-4 shrink-0 tabular-nums"></span>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script is:inline>
+  var isApproved=false,isAdmin=false,myAlumniId=null;
+  var currentFolderId=null,allPhotosData=[],lbImages=[],lbIdx=0;
+  var ssIdx=0,ssPlaying=false,ssTimer=null;
+  var LAYOUTS=['polaroid','magazine','filmstrip','feed','slideshow','yearbook'];
+  var currentLayout='magazine';
+
+  // Magazine span pattern (3-col, repeats every 7)
+  var MAG=[{cs:2,rs:2},{cs:1,rs:1},{cs:1,rs:1},{cs:1,rs:2},{cs:2,rs:1},{cs:1,rs:1},{cs:1,rs:1}];
+
+  fetch('/api/auth/me',{credentials:'include'}).then(function(r){return r.ok?r.json():null}).then(function(d){
+    if(!d||!d.user)return;
+    isApproved=d.user.status==='approved';isAdmin=d.user.role==='admin';myAlumniId=d.user.alumni_id;
+    var el=document.getElementById('nav-login');
+    if(el){el.textContent=d.user.name||'Profil';el.href='/profile';}
+    if(isApproved)document.getElementById('btn-new-folder').classList.remove('hidden');
+    if(isAdmin)document.getElementById('layout-toggle-bar').classList.remove('hidden');
+  }).catch(function(){});
+
+  loadFolders();
+
+  // ── Layout toggle ─────────────────────────────────────────────────────────
+
+  function setLayout(mode){
+    currentLayout=mode;
+    LAYOUTS.forEach(function(l){
+      var btn=document.getElementById('tgl-'+l);
+      if(!btn)return;
+      btn.style.cssText=l===mode?'background:#92400e;color:#fff':'background:transparent;color:#78716c';
+    });
+    if(allPhotosData.length)renderLayout();
+  }
+
+  function changeLayout(mode){
+    setLayout(mode);
+    if(!currentFolderId)return;
+    fetch('/api/gallery/folders/'+currentFolderId+'/layout',{
+      method:'PUT',credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({layout:mode})
+    });
+  }
+
+  function renderLayout(){
+    LAYOUTS.forEach(function(l){
+      var el=document.getElementById('view-'+l);
+      el.style.display='';
+      el.classList.add('hidden');
+    });
+    ssStop();
+    document.getElementById('view-'+currentLayout).classList.remove('hidden');
+    var fn={polaroid:renderPolaroid,magazine:renderMagazine,filmstrip:renderFilmstrip,feed:renderFeed,slideshow:renderSlideshow,yearbook:renderYearbook};
+    fn[currentLayout]();
+  }
+
+  // ── Folders ───────────────────────────────────────────────────────────────
+
+  function loadFolders(){
+    fetch('/api/gallery/folders').then(function(r){return r.json()}).then(function(list){
+      var grid=document.getElementById('folders-grid');grid.innerHTML='';
+      if(!list.length){document.getElementById('folders-empty').classList.remove('hidden');return;}
+      document.getElementById('folders-empty').classList.add('hidden');
+      list.forEach(function(f){
+        var card=document.createElement('div');card.className='cursor-pointer group';
+        card.onclick=function(){openFolder(f.id,f.name,f.description||'');};
+        var collage=document.createElement('div');
+        collage.className='relative rounded-2xl overflow-hidden bg-stone-200 mb-2 shadow-sm group-hover:shadow-md transition-shadow';
+        collage.style.cssText='aspect-ratio:1/1';
+        if(f.previews&&f.previews.length>=4){
+          collage.style.display='grid';collage.style.gridTemplateColumns='1fr 1fr';collage.style.gridTemplateRows='1fr 1fr';collage.style.gap='2px';
+          f.previews.slice(0,4).forEach(function(fn){var img=document.createElement('img');img.src='/photos/'+fn;img.style.cssText='width:100%;height:100%;object-fit:cover';collage.appendChild(img);});
+        }else if(f.previews&&f.previews.length>0){
+          var img=document.createElement('img');img.src='/photos/'+f.previews[0];img.style.cssText='width:100%;height:100%;object-fit:cover';collage.appendChild(img);
+        }else{collage.style.cssText+='display:flex;align-items:center;justify-content:center';collage.innerHTML='<span style="font-size:2.5rem">🖼️</span>';}
+        if(isAdmin){
+          var db=document.createElement('button');
+          db.className='absolute top-2 right-2 bg-red-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition z-10';
+          db.textContent='×';db.onclick=function(e){e.stopPropagation();confirmDeleteFolder(f.id,f.name);};
+          collage.style.position='relative';collage.appendChild(db);
+        }
+        var nm=document.createElement('p');nm.className='text-sm font-semibold text-stone-800 truncate';nm.textContent=f.name;
+        var ct=document.createElement('p');ct.className='text-xs text-stone-400';ct.textContent=f.count+' photo'+(f.count===1?'':'s');
+        card.appendChild(collage);card.appendChild(nm);card.appendChild(ct);grid.appendChild(card);
+      });
+    });
+  }
+
+  function showNewFolder(){document.getElementById('new-folder-form').classList.remove('hidden');document.getElementById('nf-name').focus();}
+  function hideNewFolder(){document.getElementById('new-folder-form').classList.add('hidden');document.getElementById('nf-name').value='';document.getElementById('nf-desc').value='';document.getElementById('nf-msg').classList.add('hidden');}
+  function createFolder(){
+    var name=document.getElementById('nf-name').value.trim(),desc=document.getElementById('nf-desc').value.trim(),msg=document.getElementById('nf-msg');
+    if(!name){msg.textContent='Name required';msg.className='text-sm mt-2 text-red-600';msg.classList.remove('hidden');return;}
+    fetch('/api/gallery/folders',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({name:name,description:desc})})
+      .then(function(r){return r.json()}).then(function(d){if(d.success){hideNewFolder();loadFolders();}else{msg.textContent=d.error||'Error';msg.className='text-sm mt-2 text-red-600';msg.classList.remove('hidden');}});
+  }
+  function confirmDeleteFolder(id,name){
+    if(!confirm('Delete folder "'+name+'" and all its photos? This cannot be undone.'))return;
+    fetch('/api/gallery/folders/'+id,{method:'DELETE',credentials:'include'}).then(function(r){return r.json()}).then(loadFolders);
+  }
+
+  // ── Folder open/close ─────────────────────────────────────────────────────
+
+  function openFolder(id,name,desc){
+    currentFolderId=id;ssStop();
+    document.getElementById('folder-title').textContent=name;
+    document.getElementById('folder-desc').textContent=desc;
+    document.getElementById('v-folders').classList.add('hidden');
+    document.getElementById('v-photos').classList.remove('hidden');
+    document.getElementById('btn-upload').classList.toggle('hidden',!isApproved);
+    document.getElementById('btn-del-folder').classList.toggle('hidden',!isAdmin);
+    history.replaceState(null,'','?folder='+id);
+    loadPhotos(id);
+  }
+  function showFolders(){
+    ssStop();currentFolderId=null;
+    document.getElementById('v-photos').classList.add('hidden');
+    LAYOUTS.forEach(function(l){document.getElementById('view-'+l).classList.add('hidden');});
+    document.getElementById('v-folders').classList.remove('hidden');
+    hideUpload();history.replaceState(null,'','/gallery');loadFolders();
+  }
+  function loadPhotos(folderId){
+    fetch('/api/gallery/folders/'+folderId).then(function(r){return r.json()}).then(function(d){
+      allPhotosData=d.photos||[];
+      lbImages=allPhotosData.map(function(p){return '/photos/'+p.filename;});
+      document.getElementById('photo-count').textContent=allPhotosData.length+' photo'+(allPhotosData.length===1?'':'s');
+      var empty=!allPhotosData.length;
+      document.getElementById('photos-empty').classList.toggle('hidden',!empty);
+      if(!empty){
+        setLayout((d.folder&&d.folder.default_layout)||'magazine');
+      }
+    });
+  }
+  function deleteFolder(){
+    if(!confirm('Delete folder "'+document.getElementById('folder-title').textContent+'" and all its photos? This cannot be undone.'))return;
+    fetch('/api/gallery/folders/'+currentFolderId,{method:'DELETE',credentials:'include'}).then(function(r){return r.json()}).then(showFolders);
+  }
+  function deletePhoto(id){
+    if(!confirm('Delete this photo?'))return;
+    fetch('/api/gallery/photos/'+id,{method:'DELETE',credentials:'include'}).then(function(r){return r.json()}).then(function(){loadPhotos(currentFolderId);});
+  }
+
+  // ── ① Polaroid ────────────────────────────────────────────────────────────
+
+  function renderPolaroid(){
+    var wrap=document.getElementById('view-polaroid');wrap.innerHTML='';
+    wrap.style.cssText='background:#faf5ef;border-radius:16px;padding:24px 16px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px 16px';
+    if(window.innerWidth<600)wrap.style.gridTemplateColumns='repeat(2,1fr)';
+    allPhotosData.forEach(function(p,idx){
+      var rot=(Math.sin(idx*1.7+1)*4.5).toFixed(2);
+      var cell=document.createElement('div');
+      cell.className='polaroid-card';
+      cell.style.cssText='background:#fff;padding:10px 10px 32px;box-shadow:0 4px 14px rgba(0,0,0,0.13);transform:rotate('+rot+'deg);cursor:pointer;position:relative';
+      cell.onclick=function(){openLB(idx);};
+      var img=document.createElement('img');
+      img.src='/photos/'+p.filename;
+      img.style.cssText='width:100%;aspect-ratio:1/1;object-fit:cover;display:block';
+      var cap=document.createElement('p');
+      cap.style.cssText='font-family:cursive;font-size:11px;color:#555;text-align:center;margin-top:6px;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px';
+      cap.textContent=p.caption||'';
+      cell.appendChild(img);cell.appendChild(cap);
+      if(isAdmin){
+        var db=document.createElement('button');
+        db.style.cssText='position:absolute;top:6px;right:6px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:13px;display:none;align-items:center;justify-content:center;z-index:5';
+        db.textContent='×';db.onclick=function(e){e.stopPropagation();deletePhoto(p.id);};
+        cell.onmouseenter=function(){db.style.display='flex';};cell.onmouseleave=function(){db.style.display='none';};
+        cell.appendChild(db);
+      }
+      wrap.appendChild(cell);
+    });
+  }
+
+  // ── ② Magazine ────────────────────────────────────────────────────────────
+
+  function renderMagazine(){
+    var grid=document.getElementById('mag-grid');grid.innerHTML='';
+    var mob=window.innerWidth<600;
+    grid.style.gridTemplateColumns='repeat(3,1fr)';
+    grid.style.gridAutoRows=mob?'110px':'220px';
+    allPhotosData.forEach(function(p,idx){
+      var span=MAG[idx%MAG.length];
+      var cell=document.createElement('div');
+      cell.style.cssText='grid-column:span '+span.cs+';grid-row:span '+span.rs+';overflow:hidden;border-radius:10px;cursor:pointer;position:relative;background:#1c1917';
+      cell.className='group';
+      var img=document.createElement('img');img.src='/photos/'+p.filename;
+      img.style.cssText='width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s';
+      img.onmouseenter=function(){img.style.transform='scale(1.06)';};img.onmouseleave=function(){img.style.transform='scale(1)';};
+      img.onclick=function(){openLB(idx);};
+      if(p.caption){
+        var cap=document.createElement('div');
+        cap.style.cssText='position:absolute;bottom:0;left:0;right:0;padding:10px 12px;background:linear-gradient(transparent,rgba(0,0,0,.65));color:#fff;font-size:12px;opacity:0;transition:opacity .3s;pointer-events:none';
+        cap.textContent=p.caption;
+        cell.onmouseenter=function(){cap.style.opacity='1';};cell.onmouseleave=function(){cap.style.opacity='0';};
+        cell.appendChild(img);cell.appendChild(cap);
+      }else{cell.appendChild(img);}
+      if(isAdmin){
+        var db=document.createElement('button');
+        db.style.cssText='position:absolute;top:8px;right:8px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:26px;height:26px;cursor:pointer;font-size:14px;display:none;align-items:center;justify-content:center;z-index:10';
+        db.textContent='×';db.onclick=function(e){e.stopPropagation();deletePhoto(p.id);};
+        var prev=cell.onmouseenter;cell.onmouseenter=function(){if(prev)prev();db.style.display='flex';};
+        var prev2=cell.onmouseleave;cell.onmouseleave=function(){if(prev2)prev2();db.style.display='none';};
+        cell.appendChild(db);
+      }
+      grid.appendChild(cell);
+    });
+  }
+
+  // ── ③ Filmstrip ───────────────────────────────────────────────────────────
+
+  function makeSprocket(n){
+    var s=document.createElement('div');s.className='sprocket';
+    for(var i=0;i<n;i++){var h=document.createElement('div');h.className='sprocket-hole';s.appendChild(h);}
+    return s;
+  }
+  function renderFilmstrip(){
+    var wrap=document.getElementById('view-filmstrip');wrap.innerHTML='';
+    var holes=Math.min(14,Math.ceil(allPhotosData.length/2)+2);
+    // Two-column photo grid flanked by sprockets
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:flex-start;gap:0;padding:0 8px';
+    row.appendChild(makeSprocket(holes));
+    var inner=document.createElement('div');
+    inner.style.cssText='flex:1;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:0 8px';
+    allPhotosData.forEach(function(p,idx){
+      var frame=document.createElement('div');frame.className='film-frame';
+      frame.style.cssText='aspect-ratio:4/3;cursor:pointer;position:relative';
+      var img=document.createElement('img');img.src='/photos/'+p.filename;frame.onclick=function(){openLB(idx);};
+      if(p.caption){
+        var cap=document.createElement('div');
+        cap.style.cssText='position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);color:#ccc;font-size:10px;padding:4px 6px;letter-spacing:.02em';
+        cap.textContent=p.caption;frame.appendChild(img);frame.appendChild(cap);
+      }else{frame.appendChild(img);}
+      if(isAdmin){
+        var db=document.createElement('button');
+        db.style.cssText='position:absolute;top:5px;right:5px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:12px;display:none;align-items:center;justify-content:center;z-index:5';
+        db.textContent='×';db.onclick=function(e){e.stopPropagation();deletePhoto(p.id);};
+        frame.onmouseenter=function(){db.style.display='flex';};frame.onmouseleave=function(){db.style.display='none';};
+        frame.appendChild(db);
+      }
+      inner.appendChild(frame);
+    });
+    row.appendChild(inner);
+    row.appendChild(makeSprocket(holes));
+    wrap.appendChild(row);
+  }
+
+  // ── ④ Feed ────────────────────────────────────────────────────────────────
+
+  function renderFeed(){
+    var wrap=document.getElementById('view-feed');wrap.innerHTML='';
+    allPhotosData.forEach(function(p,idx){
+      var item=document.createElement('div');item.className='feed-item';item.style.cssText='margin-bottom:24px';
+      var imgWrap=document.createElement('div');imgWrap.style.cssText='border-radius:12px;overflow:hidden;cursor:pointer;position:relative';
+      var img=document.createElement('img');img.src='/photos/'+p.filename;img.style.cssText='width:100%;display:block';
+      img.onclick=function(){openLB(idx);};imgWrap.appendChild(img);
+      if(isAdmin){
+        var db=document.createElement('button');
+        db.style.cssText='position:absolute;top:10px;right:10px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:15px;display:none;align-items:center;justify-content:center;z-index:5';
+        db.textContent='×';db.onclick=function(e){e.stopPropagation();deletePhoto(p.id);};
+        imgWrap.onmouseenter=function(){db.style.display='flex';};imgWrap.onmouseleave=function(){db.style.display='none';};
+        imgWrap.appendChild(db);
+      }
+      item.appendChild(imgWrap);
+      if(p.caption){
+        var cap=document.createElement('p');cap.style.cssText='font-size:13px;color:#57534e;margin-top:8px;line-height:1.5;padding:0 2px';cap.textContent=p.caption;item.appendChild(cap);
+      }
+      var divider=document.createElement('div');divider.style.cssText='height:1px;background:#e7e5e4;margin-top:24px';item.appendChild(divider);
+      wrap.appendChild(item);
+    });
+  }
+
+  // ── ⑤ Slideshow ───────────────────────────────────────────────────────────
+
+  function renderSlideshow(){
+    buildThumbs();ssGo(0);
+    document.getElementById('ss-del-btn').classList.toggle('hidden',!isAdmin);
+  }
+  function buildThumbs(){
+    var strip=document.getElementById('ss-thumbs');strip.innerHTML='';
+    allPhotosData.forEach(function(p,idx){
+      var t=document.createElement('img');t.src='/photos/'+p.filename;
+      t.style.cssText='width:72px;height:72px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0;transition:opacity .2s,box-shadow .2s';
+      t.onclick=function(){ssGo(idx);};strip.appendChild(t);
+    });
+  }
+  function ssGo(idx){
+    ssIdx=idx;var p=allPhotosData[idx],hero=document.getElementById('ss-hero');
+    hero.style.opacity='0';
+    setTimeout(function(){hero.src='/photos/'+p.filename;hero.onload=function(){hero.style.opacity='1';};},110);
+    document.getElementById('ss-caption').textContent=p.caption||'';
+    document.getElementById('ss-counter').textContent=(idx+1)+' / '+allPhotosData.length;
+    Array.from(document.getElementById('ss-thumbs').children).forEach(function(t,i){
+      if(i===idx){t.style.boxShadow='0 0 0 3px #b45309';t.style.opacity='1';t.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}
+      else{t.style.boxShadow='none';t.style.opacity='0.5';}
+    });
+  }
+  function ssPrev(){ssGo((ssIdx-1+allPhotosData.length)%allPhotosData.length);}
+  function ssNext(){ssGo((ssIdx+1)%allPhotosData.length);}
+  function ssTogglePlay(){if(ssPlaying)ssStop();else ssPlay();}
+  function ssPlay(){ssPlaying=true;document.getElementById('ss-play-btn').innerHTML='&#9646;&#9646;';ssTimer=setInterval(ssNext,3500);}
+  function ssStop(){ssPlaying=false;var b=document.getElementById('ss-play-btn');if(b)b.innerHTML='&#9654;';if(ssTimer){clearInterval(ssTimer);ssTimer=null;}}
+  function deleteSsCurrent(){deletePhoto(allPhotosData[ssIdx].id);}
+  var ssTouchX=0,ssTouchY=0;
+  document.getElementById('ss-hero-wrap').addEventListener('touchstart',function(e){ssTouchX=e.touches[0].clientX;ssTouchY=e.touches[0].clientY;},{passive:true});
+  document.getElementById('ss-hero-wrap').addEventListener('touchend',function(e){
+    var dx=e.changedTouches[0].clientX-ssTouchX,dy=e.changedTouches[0].clientY-ssTouchY;
+    if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)){if(dx>0)ssPrev();else ssNext();}
+  });
+
+  // ── ⑥ Yearbook ────────────────────────────────────────────────────────────
+
+  function renderYearbook(){
+    var grid=document.getElementById('yb-grid');grid.innerHTML='';
+    var mob=window.innerWidth<600;
+    grid.style.gridTemplateColumns=mob?'repeat(3,1fr)':'repeat(4,1fr)';
+    allPhotosData.forEach(function(p,idx){
+      var cell=document.createElement('div');cell.style.cssText='text-align:center;cursor:pointer;position:relative';
+      var imgWrap=document.createElement('div');imgWrap.style.cssText='overflow:hidden;border-radius:8px;background:#f5f0ea;aspect-ratio:3/4';
+      var img=document.createElement('img');img.src='/photos/'+p.filename;img.style.cssText='width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s';
+      img.onmouseenter=function(){img.style.transform='scale(1.04)';};img.onmouseleave=function(){img.style.transform='scale(1)';};
+      img.onclick=function(){openLB(idx);};imgWrap.appendChild(img);
+      if(isAdmin){
+        var db=document.createElement('button');
+        db.style.cssText='position:absolute;top:5px;right:5px;background:#dc2626;color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:12px;display:none;align-items:center;justify-content:center;z-index:5';
+        db.textContent='×';db.onclick=function(e){e.stopPropagation();deletePhoto(p.id);};
+        imgWrap.onmouseenter=function(){db.style.display='flex';};imgWrap.onmouseleave=function(){db.style.display='none';};
+        imgWrap.appendChild(db);
+      }
+      var cap=document.createElement('p');cap.style.cssText='font-size:11px;color:#78716c;margin-top:5px;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px';
+      cap.textContent=p.caption||'—';
+      cell.appendChild(imgWrap);cell.appendChild(cap);grid.appendChild(cell);
+    });
+  }
+
+  // ── Upload ────────────────────────────────────────────────────────────────
+
+  function showUpload(){document.getElementById('upload-form').classList.remove('hidden');document.getElementById('upload-msg').textContent='';}
+  function hideUpload(){document.getElementById('upload-form').classList.add('hidden');document.getElementById('upload-files').value='';document.getElementById('upload-caption').value='';document.getElementById('upload-msg').textContent='';}
+  function uploadPhotos(){
+    var files=document.getElementById('upload-files').files,caption=document.getElementById('upload-caption').value.trim(),msg=document.getElementById('upload-msg');
+    if(!files.length){msg.textContent='Select at least one photo';return;}
+    msg.textContent='Uploading...';
+    var fd=new FormData();for(var i=0;i<files.length;i++)fd.append('photos',files[i]);if(caption)fd.append('caption',caption);
+    fetch('/api/gallery/folders/'+currentFolderId+'/photos',{method:'POST',credentials:'include',body:fd})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.success){msg.textContent=d.uploaded+' photo'+(d.uploaded===1?'':'s')+' uploaded!';setTimeout(function(){hideUpload();loadPhotos(currentFolderId);},800);}
+        else{msg.textContent=d.error||'Upload failed';}
+      }).catch(function(){msg.textContent='Upload failed';});
+  }
+
+  // ── Lightbox ──────────────────────────────────────────────────────────────
+
+  function openLB(idx){lbIdx=idx;showLBImg();document.getElementById('lightbox').classList.remove('hidden');}
+  function closeLB(){document.getElementById('lightbox').classList.add('hidden');}
+  function lbNext(){lbIdx=(lbIdx+1)%lbImages.length;showLBImg();}
+  function lbPrev(){lbIdx=(lbIdx-1+lbImages.length)%lbImages.length;showLBImg();}
+  function showLBImg(){
+    document.getElementById('lb-img').src=lbImages[lbIdx];
+    document.getElementById('lb-counter').textContent=(lbIdx+1)+' / '+lbImages.length;
+    var p=allPhotosData[lbIdx];document.getElementById('lb-caption').textContent=p&&p.caption?p.caption:'';
+  }
+
+  document.addEventListener('keydown',function(e){
+    var lbOpen=!document.getElementById('lightbox').classList.contains('hidden');
+    if(lbOpen){if(e.key==='Escape')closeLB();if(e.key==='ArrowRight')lbNext();if(e.key==='ArrowLeft')lbPrev();}
+    else if(!document.getElementById('v-photos').classList.contains('hidden')&&allPhotosData.length&&currentLayout==='slideshow'){
+      if(e.key==='ArrowRight')ssNext();if(e.key==='ArrowLeft')ssPrev();
+    }
+  });
+
+  var lbTouchX=0,lbTouchY=0;
+  document.getElementById('lightbox').addEventListener('touchstart',function(e){lbTouchX=e.touches[0].clientX;lbTouchY=e.touches[0].clientY;});
+  document.getElementById('lightbox').addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+  document.getElementById('lightbox').addEventListener('touchend',function(e){
+    var dx=e.changedTouches[0].clientX-lbTouchX,dy=e.changedTouches[0].clientY-lbTouchY;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)){if(dx>0)lbPrev();else lbNext();}
+    else if(Math.abs(dx)<10&&Math.abs(dy)<10)closeLB();
+  });
+
+  window.addEventListener('resize',function(){
+    if(allPhotosData.length&&currentLayout!=='slideshow')renderLayout();
+  });
+
+  var fp=new URLSearchParams(window.location.search).get('folder');
+  if(fp){
+    fetch('/api/gallery/folders/'+fp).then(function(r){return r.ok?r.json():null}).then(function(d){
+      if(d&&d.folder)openFolder(d.folder.id,d.folder.name,d.folder.description||'');
+    });
+  }
+</script>
