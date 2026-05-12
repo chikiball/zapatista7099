@@ -1428,6 +1428,90 @@ app.post("/api/forum/react", approvedMiddleware, (req, res) => {
   }
 });
 
+// ── Du-Du (Dari-Untuk wall) ─────────────────────────
+db.exec(`CREATE TABLE IF NOT EXISTS dudu_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dari_text TEXT NOT NULL,
+  untuk_text TEXT NOT NULL,
+  pesan TEXT NOT NULL,
+  posted_by INTEGER REFERENCES alumni(id),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+db.exec(`CREATE TABLE IF NOT EXISTS dudu_reactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  note_id INTEGER NOT NULL REFERENCES dudu_notes(id) ON DELETE CASCADE,
+  alumni_id INTEGER NOT NULL REFERENCES alumni(id),
+  emoji TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(note_id, alumni_id, emoji)
+)`);
+
+// GET /api/dudu — list all notes with reactions
+app.get("/api/dudu", (req, res) => {
+  const notes = db.prepare(`SELECT n.*, al.name as poster_name, al.nickname as poster_nick
+    FROM dudu_notes n LEFT JOIN alumni al ON n.posted_by=al.id ORDER BY n.created_at DESC`).all();
+  var myAlumniId = 0;
+  try {
+    const token = req.cookies.token || (req.headers.authorization || "").replace("Bearer ", "");
+    if (token) { const u = jwt.verify(token, JWT_SECRET); const row = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(u.id); if (row) myAlumniId = row.alumni_id || 0; }
+  } catch(e) {}
+  notes.forEach(n => {
+    const rx = db.prepare("SELECT emoji, COUNT(*) as cnt, MAX(CASE WHEN alumni_id=? THEN 1 ELSE 0 END) as reacted FROM dudu_reactions WHERE note_id=? GROUP BY emoji")
+      .all(myAlumniId, n.id);
+    n.reactions = rx.map(r => ({ emoji: r.emoji, count: r.cnt, reacted: r.reacted === 1 }));
+  });
+  res.json(notes);
+});
+
+// POST /api/dudu — create note
+app.post("/api/dudu", approvedMiddleware, (req, res) => {
+  const { dari_text, untuk_text, pesan } = req.body;
+  if (!dari_text || !untuk_text || !pesan) return res.status(400).json({ error: "Semua field wajib diisi" });
+  if (dari_text.length > 60 || untuk_text.length > 60 || pesan.length > 280) return res.status(400).json({ error: "Terlalu panjang" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  const alumniId = user ? user.alumni_id : null;
+  const result = db.prepare("INSERT INTO dudu_notes (dari_text, untuk_text, pesan, posted_by) VALUES (?,?,?,?)")
+    .run(dari_text.trim(), untuk_text.trim(), pesan.trim(), alumniId);
+
+  // Notify @mentions in untuk + pesan
+  const mentionEmails = getMentionedEmails(untuk_text + " " + pesan, alumniId);
+  mentionEmails.forEach(email => {
+    sendEmail(email, "Ada Du-Du buat kamu di 7099",
+      emailTemplate("Kamu dapat Du-Du! 💌",
+        "<b>Dari:</b> " + dari_text.trim() + "<br><b>Untuk:</b> " + untuk_text.trim() + "<br><br><i>\"" + pesan.trim() + "\"</i>",
+        "Lihat di Wall", "https://zapa.inweb.id/dudu"));
+  });
+
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+// DELETE /api/dudu/:id — admin or owner
+app.delete("/api/dudu/:id", approvedMiddleware, (req, res) => {
+  const note = db.prepare("SELECT * FROM dudu_notes WHERE id=?").get(req.params.id);
+  if (!note) return res.status(404).json({ error: "Not found" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  if (note.posted_by !== (user && user.alumni_id) && req.user.role !== "admin") return res.status(403).json({ error: "Forbidden" });
+  db.prepare("DELETE FROM dudu_notes WHERE id=?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// POST /api/dudu/react — toggle reaction
+app.post("/api/dudu/react", approvedMiddleware, (req, res) => {
+  const { note_id, emoji } = req.body;
+  const valid = ["❤️","👍","😂","🎉","😮"];
+  if (!valid.includes(emoji) || !note_id) return res.status(400).json({ error: "Invalid input" });
+  const user = db.prepare("SELECT alumni_id FROM users WHERE id=?").get(req.user.id);
+  if (!user || !user.alumni_id) return res.status(400).json({ error: "No profile" });
+  const existing = db.prepare("SELECT id FROM dudu_reactions WHERE note_id=? AND alumni_id=? AND emoji=?").get(note_id, user.alumni_id, emoji);
+  if (existing) {
+    db.prepare("DELETE FROM dudu_reactions WHERE id=?").run(existing.id);
+    res.json({ success: true, action: "removed" });
+  } else {
+    db.prepare("INSERT INTO dudu_reactions (note_id, alumni_id, emoji) VALUES (?,?,?)").run(note_id, user.alumni_id, emoji);
+    res.json({ success: true, action: "added" });
+  }
+});
+
 // ── Start ───────────────────────────────────────────
 app.listen(PORT, "127.0.0.1", () => {
   console.log(`Alumni API running on port ${PORT}`);

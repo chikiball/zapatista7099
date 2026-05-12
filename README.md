@@ -10,7 +10,7 @@
 
 | Feature | Status | URL |
 |---------|--------|-----|
-| Homepage with dynamic stats | ✅ | `/` |
+| Homepage with dynamic stats + floating du-du bubble | ✅ | `/` |
 | Login (Email + Google OAuth) | ✅ | `/login` |
 | Password Reset | ✅ | `/reset` |
 | Profile (auto-match alumni DB, edit, photo upload) | ✅ | `/profile` |
@@ -21,8 +21,9 @@
 | Events (RSVP, images, .ics calendar, maps link) | ✅ | `/events` |
 | Gallery (folders, 6 view modes, admin layout control) | ✅ | `/gallery` |
 | Forum (categories, threads, replies, reactions, @mentions) | ✅ | `/forum` |
+| Du-Du Wall (dari-untuk notes, mading-style, @autocomplete) | ✅ | `/dudu` |
 | Admin Panel (approval queue, alumni/user mgmt, settings) | ✅ | `/admin` |
-| Email Notifications (articles, events, forum replies/mentions) | ✅ | — |
+| Email Notifications (articles, events, forum, du-du mentions) | ✅ | — |
 | Auto-Geocoding (city → lat/lng via Nominatim) | ✅ | — |
 | PWA (installable, custom icon, app name) | ✅ | — |
 
@@ -60,6 +61,7 @@
 │   │   ├── events.astro       # Events (RSVP, cover + inline images)
 │   │   ├── gallery.astro      # Photo gallery (6 layouts, folder-based)
 │   │   ├── forum.astro        # Discussion forum (categories, threads, reactions)
+│   │   ├── dudu.astro         # Du-Du wall (dari-untuk, mading-style, @mention)
 │   │   └── admin.astro        # Admin panel
 │   └── layouts/
 │       └── Layout.astro       # HTML shell with PWA meta tags
@@ -169,6 +171,14 @@ pm2 restart alumni-api  # if API changed
 | `/api/forum/replies/:id` | DELETE | Admin | Delete reply |
 | `/api/forum/react` | POST | Approved | Toggle emoji reaction |
 
+### Du-Du Wall
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/dudu` | GET | No | List all notes with reactions |
+| `/api/dudu` | POST | Approved | Create note (fires @mention email notifications) |
+| `/api/dudu/:id` | DELETE | Owner/Admin | Delete note |
+| `/api/dudu/react` | POST | Approved | Toggle emoji reaction |
+
 ### Admin
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
@@ -200,6 +210,8 @@ pm2 restart alumni-api  # if API changed
 | `forum_threads` | category_id, author_id, title, body, is_sticky, is_locked, view_count |
 | `forum_replies` | thread_id, author_id, body |
 | `forum_reactions` | thread_id, reply_id, alumni_id, emoji |
+| `dudu_notes` | dari_text, untuk_text, pesan, posted_by |
+| `dudu_reactions` | note_id, alumni_id, emoji |
 | `config` | key, value (smtp_*, telegram_*) |
 
 ## What's NOT Built Yet

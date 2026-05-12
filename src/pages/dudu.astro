@@ -1,0 +1,452 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Du-Du Wall - 7099">
+  <style>
+    .note-card {
+      display: inline-block;
+      width: 100%;
+      transition: transform .25s, box-shadow .25s;
+      break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+      page-break-inside: avoid;
+      margin-bottom: 14px;
+    }
+    .note-card:hover { transform: rotate(0deg) scale(1.03) !important; box-shadow: 0 10px 28px rgba(0,0,0,0.18) !important; z-index: 2; }
+    .note-card .mention { color: #92400e; font-weight: 600; }
+    #wall-bg { background: repeating-linear-gradient(0deg, transparent 0 24px, rgba(120, 80, 40, 0.04) 24px 25px), repeating-linear-gradient(90deg, transparent 0 24px, rgba(120, 80, 40, 0.04) 24px 25px), #faf5ef; }
+    .chr-counter { transition: color .2s; }
+    .chr-counter.near { color: #b45309; }
+    .chr-counter.over { color: #dc2626; }
+    #mention-dropdown { position:fixed; background:#fff; border:1px solid #e7e5e4; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.14); max-height:220px; overflow-y:auto; z-index:60; min-width:240px; display:none; }
+    .mention-item { padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid #f5f5f4; }
+    .mention-item:last-child { border-bottom:none; }
+    .mention-item:hover, .mention-item.active { background:#fef3c7; }
+    .mention-item .m-nick { font-weight:600; color:#1c1917; }
+    .mention-item .m-sub { color:#78716c; font-size:11px; }
+  </style>
+
+  <nav class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="block"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    </div>
+  </nav>
+
+  <div id="wall-bg" class="min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 py-6">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h2 class="text-2xl font-bold text-stone-800">Du-Du Wall 📌</h2>
+          <p class="text-sm text-stone-500">Dari-Untuk — majalah dinding digital ala '99</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="shuffleWall()" title="Acak" class="text-sm text-stone-600 hover:text-amber-700 px-3 py-2 rounded-lg hover:bg-white">🔀 Acak</button>
+          <button id="btn-post" class="hidden bg-amber-800 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900" onclick="showForm()">✏️ Tempel Du-Du</button>
+        </div>
+      </div>
+
+      <p id="login-notice" class="hidden bg-white rounded-xl border border-amber-200 p-4 text-sm text-stone-600 mb-4">
+        <a href="/login" class="text-amber-700 hover:underline font-semibold">Masuk</a> dulu buat nempel du-du di dinding ini!
+      </p>
+
+      <!-- Post form -->
+      <div id="post-form" class="hidden bg-white rounded-xl shadow-md border-2 border-dashed border-amber-400 p-4 mb-5">
+        <h3 class="font-semibold text-stone-800 mb-3">Tulis Du-Du</h3>
+        <div class="mb-3">
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-stone-600">Dari</label>
+            <button id="btn-use-name" type="button" onclick="useMyName()" class="text-xs text-amber-700 hover:underline">✨ Pakai nama saya</button>
+          </div>
+          <input id="f-dari" type="text" maxlength="60" placeholder="Bisa nama, julukan, atau 'anonim'..."
+            class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+        </div>
+        <div class="mb-3">
+          <label class="text-xs font-semibold text-stone-600 block mb-1">Untuk</label>
+          <input id="f-untuk" type="text" maxlength="60" placeholder="Nama / kelompok / @nickname..."
+            class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+          <p class="text-xs text-stone-400 mt-1">Gunakan <code>@nickname</code> untuk tag alumni — mereka akan dapat email notifikasi.</p>
+        </div>
+        <div class="mb-3">
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-stone-600">Pesan</label>
+            <span id="chr-count" class="chr-counter text-xs text-stone-400">0 / 280</span>
+          </div>
+          <textarea id="f-pesan" maxlength="280" rows="3" placeholder="Tulis pesanmu..."
+            class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm resize-y focus:ring-2 focus:ring-amber-500 outline-none"></textarea>
+        </div>
+        <div class="flex gap-2 items-center">
+          <button onclick="submitNote()" class="bg-amber-800 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-amber-900">📌 Tempel</button>
+          <button onclick="hideForm()" class="text-stone-500 text-sm px-3 py-2 hover:text-stone-800">Batal</button>
+          <span id="form-msg" class="text-sm text-stone-500 ml-2"></span>
+        </div>
+      </div>
+
+      <!-- Wall -->
+      <div id="wall"></div>
+      <p id="wall-empty" class="hidden text-center text-stone-400 py-16">Belum ada du-du. Jadilah yang pertama nempel!</p>
+    </div>
+  </div>
+
+  <!-- Mention autocomplete dropdown -->
+  <div id="mention-dropdown"></div>
+
+  <!-- Expand modal -->
+  <div id="note-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.6)">
+    <div id="modal-inner" class="relative max-w-md w-full rounded-2xl p-6 shadow-2xl" style="transform:rotate(-2deg)">
+      <button onclick="closeModal()" class="absolute top-2 right-3 text-stone-500 text-2xl leading-none hover:text-stone-800">&times;</button>
+      <p class="text-xs text-stone-500 mb-1"><b>Dari:</b> <span id="m-dari"></span></p>
+      <p class="text-xs text-stone-500 mb-4"><b>Untuk:</b> <span id="m-untuk"></span></p>
+      <p id="m-pesan" class="text-stone-800 text-base leading-relaxed mb-4 whitespace-pre-wrap" style="font-family:'Caveat','Kalam',cursive"></p>
+      <p id="m-meta" class="text-xs text-stone-400 mb-3"></p>
+      <div id="m-reactions" class="flex items-center gap-1 flex-wrap"></div>
+      <button id="m-delete" class="hidden mt-3 text-xs text-red-500 hover:underline" onclick="deleteCurrentNote()">Hapus du-du ini</button>
+    </div>
+  </div>
+</Layout>
+
+<script is:inline>
+  var isApproved=false, isAdmin=false, myAlumniId=null, myDisplayName='';
+  var allNotes=[], currentNote=null;
+  var EMOJIS=['❤️','👍','😂','🎉','😮'];
+  var COLORS=['#fef3c7','#fce7f3','#d1fae5','#dbeafe','#fed7aa','#e9d5ff','#fecaca'];
+
+  fetch('/api/auth/me',{credentials:'include'}).then(function(r){return r.ok?r.json():null}).then(function(d){
+    if(!d||!d.user)return;
+    isApproved=d.user.status==='approved';
+    isAdmin=d.user.role==='admin';
+    myAlumniId=d.user.alumni_id;
+    myDisplayName=d.user.nickname||d.user.name||'';
+    var el=document.getElementById('nav-login');
+    if(el){el.textContent=d.user.name||'Profil';el.href='/profile';}
+    if(isApproved){
+      document.getElementById('btn-post').classList.remove('hidden');
+    }else{
+      document.getElementById('login-notice').classList.remove('hidden');
+    }
+  }).catch(function(){});
+
+  loadNotes();
+
+  // ── Load & render ─────────────────────────────────────────────────────────
+
+  function loadNotes(){
+    fetch('/api/dudu').then(function(r){return r.json()}).then(function(list){
+      allNotes=list;
+      renderWall();
+    });
+  }
+
+  function renderWall(){
+    var wall=document.getElementById('wall');
+    wall.innerHTML='';
+    if(!allNotes.length){
+      document.getElementById('wall-empty').classList.remove('hidden');
+      return;
+    }
+    document.getElementById('wall-empty').classList.add('hidden');
+
+    // Responsive column count
+    var w=window.innerWidth;
+    var numCols = w<600 ? 2 : (w<1024 ? 3 : 4);
+
+    // Flex row of columns — each card goes into the currently shortest column
+    wall.style.cssText='display:flex;gap:14px;align-items:flex-start';
+    var cols=[];
+    for(var i=0;i<numCols;i++){
+      var col=document.createElement('div');
+      col.style.cssText='flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:14px';
+      wall.appendChild(col);
+      cols.push({el:col, height:0});
+    }
+
+    allNotes.forEach(function(n){
+      var card=buildNoteCard(n);
+      // Pick shortest column
+      var shortest=cols[0];
+      for(var i=1;i<cols.length;i++){if(cols[i].height<shortest.height)shortest=cols[i];}
+      shortest.el.appendChild(card);
+      // Read offsetHeight to accumulate (forces layout, but OK for <1000 items)
+      shortest.height += (card.offsetHeight || 120);
+    });
+  }
+
+  function buildNoteCard(n){
+    var card=document.createElement('div');
+    var rot=(Math.sin(n.id*1.7+1)*3.2).toFixed(2);
+    var color=COLORS[n.id%COLORS.length];
+    card.className='note-card relative p-4 rounded-sm cursor-pointer shadow-md';
+    card.style.cssText='background:'+color+';transform:rotate('+rot+'deg);box-shadow:0 4px 10px rgba(0,0,0,0.1)';
+    card.onclick=function(){openNote(n);};
+
+    var header=document.createElement('div');
+    header.style.cssText='border-bottom:1px dashed rgba(0,0,0,0.15);padding-bottom:6px;margin-bottom:8px';
+    var dari=document.createElement('p');dari.className='text-xs text-stone-600';
+    dari.innerHTML='<b>Dari:</b> '+escapeHtml(n.dari_text);
+    var untuk=document.createElement('p');untuk.className='text-xs text-stone-600';
+    untuk.innerHTML='<b>Untuk:</b> '+highlightMentions(escapeHtml(n.untuk_text));
+    header.appendChild(dari);header.appendChild(untuk);
+
+    var msg=document.createElement('p');
+    msg.style.cssText='font-family:"Caveat","Kalam",cursive;font-size:18px;line-height:1.35;color:#1c1917;white-space:pre-wrap;word-break:break-word';
+    msg.innerHTML=highlightMentions(escapeHtml(n.pesan));
+
+    var footer=document.createElement('div');
+    footer.className='flex items-center justify-between mt-2 pt-2';
+    footer.style.borderTop='1px dashed rgba(0,0,0,0.1)';
+    var time=document.createElement('span');time.className='text-xs text-stone-500';
+    time.textContent=timeAgo(n.created_at);
+    var rxWrap=document.createElement('div');rxWrap.className='flex items-center gap-1';
+    (n.reactions||[]).forEach(function(rx){
+      var b=document.createElement('span');b.className='text-xs';
+      b.textContent=rx.emoji+' '+rx.count;
+      rxWrap.appendChild(b);
+    });
+    footer.appendChild(time);footer.appendChild(rxWrap);
+
+    card.appendChild(header);card.appendChild(msg);card.appendChild(footer);
+    return card;
+  }
+
+  function shuffleWall(){
+    for(var i=allNotes.length-1;i>0;i--){
+      var j=Math.floor(Math.random()*(i+1));
+      var tmp=allNotes[i];allNotes[i]=allNotes[j];allNotes[j]=tmp;
+    }
+    renderWall();
+  }
+
+  window.addEventListener('resize',function(){if(allNotes.length)renderWall();});
+
+  // ── Post form ─────────────────────────────────────────────────────────────
+
+  function showForm(){document.getElementById('post-form').classList.remove('hidden');document.getElementById('f-dari').focus();}
+  function hideForm(){
+    document.getElementById('post-form').classList.add('hidden');
+    document.getElementById('f-dari').value='';document.getElementById('f-untuk').value='';document.getElementById('f-pesan').value='';
+    document.getElementById('chr-count').textContent='0 / 280';
+    document.getElementById('chr-count').className='chr-counter text-xs text-stone-400';
+    document.getElementById('form-msg').textContent='';
+  }
+  function useMyName(){
+    if(myDisplayName)document.getElementById('f-dari').value=myDisplayName;
+  }
+
+  document.getElementById('f-pesan').addEventListener('input',function(e){
+    var n=e.target.value.length;
+    var el=document.getElementById('chr-count');
+    el.textContent=n+' / 280';
+    el.classList.remove('near','over');
+    if(n>=280)el.classList.add('over');
+    else if(n>=240)el.classList.add('near');
+  });
+
+  // ── Mention autocomplete ──────────────────────────────────────────────────
+
+  var mentionState = { field:null, start:0, items:[], activeIdx:0, debounce:null };
+
+  function setupMention(field){
+    field.addEventListener('input', handleMentionInput);
+    field.addEventListener('keydown', handleMentionKeydown);
+    field.addEventListener('blur', function(){ setTimeout(closeMentionDropdown, 180); });
+    field.addEventListener('scroll', positionDropdown);
+  }
+  setupMention(document.getElementById('f-untuk'));
+  setupMention(document.getElementById('f-pesan'));
+  window.addEventListener('scroll', positionDropdown);
+  window.addEventListener('resize', positionDropdown);
+
+  function handleMentionInput(e){
+    var field=e.target;
+    var cursor=field.selectionStart;
+    var text=field.value.substring(0, cursor);
+    var m=text.match(/@(\w{0,20})$/);
+    if(!m){ closeMentionDropdown(); return; }
+    mentionState.field=field;
+    mentionState.start=cursor - m[0].length;
+    var q=m[1];
+    if(mentionState.debounce)clearTimeout(mentionState.debounce);
+    mentionState.debounce=setTimeout(function(){fetchMentions(q);}, 120);
+  }
+
+  function fetchMentions(q){
+    if(!isApproved){ closeMentionDropdown(); return; }
+    fetch('/api/alumni/search?q='+encodeURIComponent(q||'a'), {credentials:'include'})
+      .then(function(r){return r.ok?r.json():[];})
+      .then(function(list){
+        if(!list||!list.length){ closeMentionDropdown(); return; }
+        mentionState.items=list;
+        mentionState.activeIdx=0;
+        renderMentionDropdown();
+      });
+  }
+
+  function renderMentionDropdown(){
+    var dd=document.getElementById('mention-dropdown');
+    dd.innerHTML='';
+    mentionState.items.forEach(function(al, idx){
+      var item=document.createElement('div');
+      item.className='mention-item'+(idx===mentionState.activeIdx?' active':'');
+      var label=al.nickname||al.name;
+      item.innerHTML='<span class="m-nick">'+escapeHtml(label)+'</span>'+(al.name&&al.name!==label?' <span class="m-sub">('+escapeHtml(al.name)+')</span>':'')+(al.city?' <span class="m-sub">· '+escapeHtml(al.city)+'</span>':'');
+      item.onmousedown=function(e){e.preventDefault();selectMention(idx);};
+      item.onmouseenter=function(){mentionState.activeIdx=idx;updateActive();};
+      dd.appendChild(item);
+    });
+    positionDropdown();
+    dd.style.display='block';
+  }
+
+  function updateActive(){
+    var dd=document.getElementById('mention-dropdown');
+    Array.from(dd.children).forEach(function(el,i){
+      el.classList.toggle('active', i===mentionState.activeIdx);
+    });
+  }
+
+  function selectMention(idx){
+    if(!mentionState.field||!mentionState.items[idx])return;
+    var al=mentionState.items[idx];
+    var nick=(al.nickname||al.name.split(' ')[0]).replace(/\s+/g,'');
+    var field=mentionState.field;
+    var before=field.value.substring(0, mentionState.start);
+    var cursor=field.selectionStart;
+    var after=field.value.substring(cursor);
+    var insert='@'+nick+' ';
+    field.value=before+insert+after;
+    var newPos=before.length+insert.length;
+    field.setSelectionRange(newPos, newPos);
+    field.focus();
+    field.dispatchEvent(new Event('input'));
+    closeMentionDropdown();
+  }
+
+  function handleMentionKeydown(e){
+    var dd=document.getElementById('mention-dropdown');
+    if(dd.style.display!=='block'||!mentionState.items.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();mentionState.activeIdx=(mentionState.activeIdx+1)%mentionState.items.length;updateActive();}
+    else if(e.key==='ArrowUp'){e.preventDefault();mentionState.activeIdx=(mentionState.activeIdx-1+mentionState.items.length)%mentionState.items.length;updateActive();}
+    else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();selectMention(mentionState.activeIdx);}
+    else if(e.key==='Escape'){e.preventDefault();closeMentionDropdown();}
+  }
+
+  function positionDropdown(){
+    var dd=document.getElementById('mention-dropdown');
+    if(!mentionState.field||dd.style.display!=='block')return;
+    var rect=mentionState.field.getBoundingClientRect();
+    dd.style.top=(rect.bottom+4)+'px';
+    dd.style.left=rect.left+'px';
+    dd.style.width=Math.max(240, rect.width)+'px';
+  }
+
+  function closeMentionDropdown(){
+    document.getElementById('mention-dropdown').style.display='none';
+    mentionState.items=[];
+    mentionState.field=null;
+  }
+
+  function submitNote(){
+    var dari=document.getElementById('f-dari').value.trim();
+    var untuk=document.getElementById('f-untuk').value.trim();
+    var pesan=document.getElementById('f-pesan').value.trim();
+    var msg=document.getElementById('form-msg');
+    if(!dari||!untuk||!pesan){msg.textContent='Semua field wajib diisi';return;}
+    msg.textContent='Nempel...';
+    fetch('/api/dudu',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body:JSON.stringify({dari_text:dari,untuk_text:untuk,pesan:pesan})})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d.success){hideForm();loadNotes();}
+        else{msg.textContent=d.error||'Gagal';}
+      }).catch(function(){msg.textContent='Gagal mengirim';});
+  }
+
+  // ── Modal ─────────────────────────────────────────────────────────────────
+
+  function openNote(n){
+    currentNote=n;
+    var color=COLORS[n.id%COLORS.length];
+    document.getElementById('modal-inner').style.background=color;
+    document.getElementById('m-dari').textContent=n.dari_text;
+    document.getElementById('m-untuk').innerHTML=highlightMentions(escapeHtml(n.untuk_text));
+    document.getElementById('m-pesan').innerHTML=highlightMentions(escapeHtml(n.pesan));
+    document.getElementById('m-meta').textContent=timeAgo(n.created_at);
+    renderReactions(n);
+    if(isAdmin||(myAlumniId&&n.posted_by===myAlumniId))document.getElementById('m-delete').classList.remove('hidden');
+    else document.getElementById('m-delete').classList.add('hidden');
+    document.getElementById('note-modal').classList.remove('hidden');
+  }
+  function closeModal(){document.getElementById('note-modal').classList.add('hidden');currentNote=null;}
+
+  document.getElementById('note-modal').addEventListener('click',function(e){
+    if(e.target===this)closeModal();
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+
+  function renderReactions(n){
+    var wrap=document.getElementById('m-reactions');wrap.innerHTML='';
+    (n.reactions||[]).forEach(function(rx){
+      var btn=document.createElement('button');
+      btn.className='flex items-center gap-1 px-2 py-1 rounded-full text-xs border '+(rx.reacted?'bg-white border-amber-500 text-amber-800':'bg-white/50 border-stone-200 text-stone-600');
+      btn.innerHTML=rx.emoji+' <span>'+rx.count+'</span>';
+      btn.onclick=function(){if(isApproved)toggleReaction(n.id,rx.emoji);};
+      wrap.appendChild(btn);
+    });
+    if(isApproved){
+      var existingEmoji=(n.reactions||[]).map(function(r){return r.emoji;});
+      var remaining=EMOJIS.filter(function(e){return !existingEmoji.includes(e);});
+      if(remaining.length){
+        var addBtn=document.createElement('button');
+        addBtn.className='px-2 py-1 rounded-full text-xs border border-stone-300 text-stone-400 hover:border-amber-400';
+        addBtn.textContent='+ 😊';
+        addBtn.onclick=function(e){
+          e.stopPropagation();
+          var picker=document.createElement('div');
+          picker.className='flex gap-1 bg-white border border-stone-200 rounded-xl shadow-lg px-2 py-1 absolute z-20';
+          picker.style.cssText='position:absolute;bottom:34px;left:0';
+          remaining.forEach(function(em){
+            var eb=document.createElement('button');eb.textContent=em;eb.className='text-xl p-1 hover:scale-125 transition-transform';
+            eb.onclick=function(){picker.remove();toggleReaction(n.id,em);};
+            picker.appendChild(eb);
+          });
+          wrap.style.position='relative';wrap.appendChild(picker);
+          setTimeout(function(){document.addEventListener('click',function rm(){picker.remove();document.removeEventListener('click',rm);},{once:true});},10);
+        };
+        wrap.appendChild(addBtn);
+      }
+    }
+  }
+
+  function toggleReaction(noteId, emoji){
+    fetch('/api/dudu/react',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+      body:JSON.stringify({note_id:noteId,emoji:emoji})})
+      .then(function(){
+        fetch('/api/dudu').then(function(r){return r.json()}).then(function(list){
+          allNotes=list;
+          renderWall();
+          var updated=list.find(function(n){return n.id===noteId;});
+          if(updated&&currentNote&&currentNote.id===noteId){currentNote=updated;renderReactions(updated);}
+        });
+      });
+  }
+
+  function deleteCurrentNote(){
+    if(!currentNote||!confirm('Hapus du-du ini?'))return;
+    fetch('/api/dudu/'+currentNote.id,{method:'DELETE',credentials:'include'})
+      .then(function(r){return r.json()}).then(function(){closeModal();loadNotes();});
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function escapeHtml(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+  function highlightMentions(html){return html.replace(/@(\w+)/g,'<span class="mention">@$1</span>');}
+  function timeAgo(str){
+    if(!str)return'';
+    var d=new Date(str),now=new Date(),s=Math.floor((now-d)/1000);
+    if(s<60)return'baru saja';
+    if(s<3600)return Math.floor(s/60)+' menit lalu';
+    if(s<86400)return Math.floor(s/3600)+' jam lalu';
+    if(s<604800)return Math.floor(s/86400)+' hari lalu';
+    return d.toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+  }
+</script>

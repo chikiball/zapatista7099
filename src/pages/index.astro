@@ -77,7 +77,7 @@ import Layout from "../layouts/Layout.astro";
   <section class="bg-white py-16 px-4">
     <div class="max-w-6xl mx-auto">
       <h3 class="text-2xl font-bold text-center mb-12">Yang Ada di Sini</h3>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
         <a href="/map" class="text-center p-6 block hover:bg-amber-50 rounded-xl transition">
           <img src="/peta_interaktif.png" alt="Peta Interaktif" class="mx-auto mb-4" style="max-height:120px;width:auto">
           <p class="text-gray-600 text-sm">Lihat dimana teman-teman kita berada sekarang</p>
@@ -94,6 +94,10 @@ import Layout from "../layouts/Layout.astro";
           <img src="/galeri_foto.png" alt="Galeri Foto" class="mx-auto mb-4" style="max-height:120px;width:auto">
           <p class="text-gray-600 text-sm">Jelajahi koleksi foto kenangan angkatan kita</p>
         </a>
+        <a href="/forum" class="text-center p-6 block hover:bg-amber-50 rounded-xl transition">
+          <img src="/forum.png" alt="Forum" class="mx-auto mb-4" style="max-height:120px;width:auto">
+          <p class="text-gray-600 text-sm">Ngobrol, tanya jawab, dan diskusi bareng alumni</p>
+        </a>
       </div>
     </div>
   </section>
@@ -102,5 +106,24 @@ import Layout from "../layouts/Layout.astro";
   <footer class="bg-amber-950 text-amber-200 py-8 px-4 text-center text-sm">
     <p>7099 - Alumni SMU 70 Angkatan 99 &copy; 2026 | Made with ❤️ by tim reuni 7099</p>
   </footer>
+
+  <!-- Floating Du-Du comic bubble button -->
+  <a href="/dudu" aria-label="Du-Du Wall"
+     class="fixed bottom-5 right-5 z-40 group"
+     style="transform:rotate(-8deg);transition:transform .25s">
+    <div class="relative" style="width:88px;height:100px">
+      <svg viewBox="0 0 120 135" width="88" height="100"
+           style="filter:drop-shadow(0 4px 8px rgba(0,0,0,0.25));overflow:visible">
+        <path d="M 60 7 C 92 7 108 28 108 55 C 108 78 94 94 76 98 L 38 128 L 52 96 C 28 90 12 74 12 55 C 12 28 28 7 60 7 Z"
+              fill="#fef3c7" stroke="#1c1917" stroke-width="4" stroke-linejoin="round"/>
+      </svg>
+      <div class="absolute inset-0 flex flex-col items-center text-stone-900 font-black"
+           style="font-family:'Caveat','Kalam','Comic Sans MS',cursive;line-height:0.9;padding-top:14px">
+        <span style="font-size:28px">du</span>
+        <span style="font-size:28px">du</span>
+      </div>
+    </div>
+    <style>a[aria-label="Du-Du Wall"]:hover{transform:rotate(0deg) scale(1.1)!important}</style>
+  </a>
   <script is:inline>fetch("/api/stats").then(function(r){return r.json()}).then(function(d){document.getElementById("stat-alumni").textContent=d.total_alumni;document.getElementById("stat-cities").textContent=d.total_cities;document.getElementById("stat-industries").textContent=d.total_industries;document.getElementById("stat-countries").textContent=d.total_countries}).catch(function(){})</script>
 </Layout>
