@@ -40,7 +40,7 @@ import Layout from "../layouts/Layout.astro";
   <section style="background:linear-gradient(135deg,#c4ad93,#b39c82,#a38d74)" class="text-white py-20 px-4">
     <div class="max-w-4xl mx-auto text-center">
       <img src="/logo-hero.png" alt="7099" class="mx-auto mb-4" style="max-height:120px;width:auto">
-      <p class="text-xl md:text-2xl opacity-90 mb-2">27 Tahun Kemudian, Tetap Terhubung</p>
+      <p id="years-since" class="text-xl md:text-2xl opacity-90 mb-2">27 Tahun Kemudian, Tetap Terhubung</p>
       <p class="text-lg opacity-75 mb-8">Menghubungkan kembali teman-teman SMA kita</p>
       <div class="flex flex-col sm:flex-row gap-4 justify-center">
         <a href="/login" class="bg-white text-amber-900 px-8 py-3 rounded-full font-semibold hover:bg-amber-50 transition">Masuk / Daftar</a>
@@ -125,5 +125,5 @@ import Layout from "../layouts/Layout.astro";
     </div>
     <style>a[aria-label="Du-Du Wall"]:hover{transform:rotate(0deg) scale(1.1)!important}</style>
   </a>
-  <script is:inline>fetch("/api/stats").then(function(r){return r.json()}).then(function(d){document.getElementById("stat-alumni").textContent=d.total_alumni;document.getElementById("stat-cities").textContent=d.total_cities;document.getElementById("stat-industries").textContent=d.total_industries;document.getElementById("stat-countries").textContent=d.total_countries}).catch(function(){})</script>
+  <script is:inline>document.getElementById("years-since").textContent=(new Date().getFullYear()-1999)+" Tahun Kemudian, Tetap Terhubung";fetch("/api/stats").then(function(r){return r.json()}).then(function(d){document.getElementById("stat-alumni").textContent=d.total_alumni;document.getElementById("stat-cities").textContent=d.total_cities;document.getElementById("stat-industries").textContent=d.total_industries;document.getElementById("stat-countries").textContent=d.total_countries}).catch(function(){})</script>
 </Layout>

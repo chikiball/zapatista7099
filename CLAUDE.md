@@ -69,6 +69,7 @@ Browser → https://zapa.inweb.id
 - **Auto-Geocoding:** When alumni saves profile or is approved by admin, city+country is sent to Nominatim to fill lat/lng automatically. Fires in background (non-blocking). Existing coords not overwritten unless city changes.
 - **PWA:** `public/manifest.json` declares app name "Zapatista 7099", standalone display, amber theme. Icons: icon-512.png, icon-192.png, icon-180.png (from zapa_icon_2.png). All iOS/Android meta tags in Layout.astro.
 - **Homepage feature grid:** 5 button cards (Map, Stats, Articles, Gallery, Forum) in responsive grid (2 mobile / 3 tablet / 5 desktop). Each uses a PNG icon + short Indonesian description.
+- **Homepage hero subtitle:** "X Tahun Kemudian, Tetap Terhubung" — auto-computed as `currentYear - 1999` via inline JS on page load. No annual maintenance needed.
 - **Floating du-du bubble:** Comic-book speech bubble SVG fixed in bottom-right of homepage, rotated -8°, Caveat font, "du / du" text, links to `/dudu`.
 
 ## Important Notes

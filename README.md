@@ -10,7 +10,7 @@
 
 | Feature | Status | URL |
 |---------|--------|-----|
-| Homepage with dynamic stats + floating du-du bubble | ✅ | `/` |
+| Homepage with dynamic stats + floating du-du bubble + auto-incrementing years-since | ✅ | `/` |
 | Login (Email + Google OAuth) | ✅ | `/login` |
 | Password Reset | ✅ | `/reset` |
 | Profile (auto-match alumni DB, edit, photo upload) | ✅ | `/profile` |
