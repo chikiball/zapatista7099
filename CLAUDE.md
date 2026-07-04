@@ -78,7 +78,7 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - **Telegram:** Bot notifies group on new registration
 - **Email:** Welcome, approval, rejection, password reset, new article/event notifications, forum reply/mention notifications, du-du mention notifications (SMTP: dr6101.inweb.id)
 - **Email notifications:** Broadcast to all approved users with `notify_email=1` via `sendNewsletterEmail()`. One-click unsubscribe via `GET /api/unsubscribe?token=xxx`. Toggle in profile page.
-- **Map:** D3 orthographic globe, neon pins, dynamic clustering, starburst cards, city labels
+- **Map:** Mapbox GL JS v3 globe projection (`streets-v12`), red translucent pins, native clustering, login-gated starburst cards, city labels
 - **Stats:** 12 sections with scroll animations, normalized jobs/industries/universities
 - **Articles:** Magazine layout, masonry photo gallery, lightbox with swipe, inline image/video upload (sharp resize), auto-link URLs, `[foto:]` and `[video:]` tag system. 95 Instagram posts imported as articles under author "Zapatista7099_Insta".
 - **Events:** RSVP toggle, cover + inline images, `[foto:]` tag system, lightbox. Any approved user can create; only admin can delete; creator/admin can edit. Date tapping downloads `.ics`. Location links to Google Maps.
@@ -107,6 +107,8 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - Forum deep-links: `/forum?thread=X`, `/forum?category=X`
 - Caveat web font loaded from Google Fonts in Layout.astro for consistent cursive rendering across devices (iOS/Android/desktop)
 - Du-Du wall uses **JS-driven flex-column masonry** — each card is appended to the currently shortest column. Do NOT use CSS `columns:` with rotated cards — `break-inside: avoid` is unreliable with transforms.
+- **Icon cache-busting:** favicon/manifest/apple-touch links in `Layout.astro` carry a `?v=${iconV}` query, driven by the `iconV` constant in the frontmatter. When you replace any icon asset (favicon.svg, icon-180/192/512.png, manifest.json), **bump `iconV`** so browsers refetch instead of serving the stale cached icon.
+- **Map:** `/map` uses **Mapbox GL JS v3** (`projection: 'globe'`, `streets-v12` style) with native GeoJSON clustering and red translucent pins. Public `pk.` token is inline in `map.astro` — must be **URL-restricted** in the Mapbox account. The starburst name cards are a login-gated DOM overlay positioned via `map.project()`; `/api/map` is unchanged.
 
 ## Deploy
 
