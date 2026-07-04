@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # 7099 Project Context — For AI Assistants
 
 > Load this file at the start of a new conversation to resume work.
@@ -32,6 +36,22 @@ Browser → https://zapa.inweb.id
 - **PM2**, **Node.js v22**
 - **PWA:** `public/manifest.json` + icons (icon-192.png, icon-512.png, icon-180.png)
 - **Fonts:** Google Fonts `Caveat` loaded globally via Layout.astro (used for du-du handwritten feel)
+
+## Local Development
+
+There is **no bundled dev script for the API** — the two halves run as separate processes:
+
+```bash
+npm install                 # root deps (Astro frontend)
+npm run dev                 # Astro dev server (frontend only)
+node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/alumni.db
+```
+
+- API reads `alumni.db` from its own dir (`api/`); `better-sqlite3` is synchronous — no `await` on queries.
+- Env vars (all optional, have fallbacks): `JWT_SECRET` (random per-boot if unset → invalidates tokens on restart), `GOOGLE_CLIENT_ID`. SMTP + Telegram creds live in the `config` DB table, set via `/admin`, not env.
+- Frontend talks to the API via `/api/*`; in prod Nginx proxies that to `:3000`. For local dev you need a matching proxy or to run the built site behind Nginx — Astro's dev server does not proxy `/api` by itself.
+- `npm run build` → `dist/`; `npm run preview` serves the build. There are **no tests or linters** configured.
+- `scripts/` has its own `package.json` (CommonJS) — `cd scripts && npm install` before running the one-time importers.
 
 ## Pages (13)
 
