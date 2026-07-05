@@ -4,9 +4,12 @@ import Layout from "../layouts/Layout.astro";
 
 <Layout title="Statistik - 7099">
   <nav class="bg-white shadow-sm sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-      <a href="/" class="text-xl font-bold text-amber-900"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
-      <a href="/login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 min-w-0">
+        <a href="/" class="text-xl font-bold text-amber-900 shrink-0"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+        <span id="nav-welcome" class="hidden text-sm text-stone-500 truncate">Welcome, <span id="nav-welcome-name" class="font-semibold text-amber-900"></span></span>
+      </div>
+      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline shrink-0">Masuk</a>
     </div>
   </nav>
 
@@ -151,6 +154,14 @@ import Layout from "../layouts/Layout.astro";
 
   <script is:inline src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script is:inline>
+  // Auth-aware nav: Masuk → Profile + Welcome greeting.
+  fetch('/api/auth/me',{credentials:'include'}).then(function(r){return r.ok?r.json():null}).then(function(d){
+    if(!d||!d.user)return;
+    var el=document.getElementById('nav-login');
+    if(el){el.textContent='Profile';el.href='/profile';}
+    var w=document.getElementById('nav-welcome');
+    if(w){document.getElementById('nav-welcome-name').textContent=d.user.name||d.user.email;w.classList.remove('hidden')}
+  }).catch(function(){});
   fetch('/api/stats/detail').then(function(r){return r.json()}).then(function(d){
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('content').classList.remove('hidden');

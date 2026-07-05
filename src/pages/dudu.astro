@@ -28,9 +28,12 @@ import Layout from "../layouts/Layout.astro";
   </style>
 
   <nav class="bg-white shadow-sm sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-      <a href="/" class="block"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
-      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline">Masuk</a>
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 min-w-0">
+        <a href="/" class="block shrink-0"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+        <span id="nav-welcome" class="hidden text-sm text-stone-500 truncate">Welcome, <span id="nav-welcome-name" class="font-semibold text-amber-900"></span></span>
+      </div>
+      <a href="/login" id="nav-login" class="text-sm text-amber-700 hover:underline shrink-0">Masuk</a>
     </div>
   </nav>
 
@@ -119,7 +122,8 @@ import Layout from "../layouts/Layout.astro";
     myAlumniId=d.user.alumni_id;
     myDisplayName=d.user.nickname||d.user.name||'';
     var el=document.getElementById('nav-login');
-    if(el){el.textContent=d.user.name||'Profil';el.href='/profile';}
+    if(el){el.textContent='Profile';el.href='/profile';}
+    var w=document.getElementById('nav-welcome');if(w){document.getElementById('nav-welcome-name').textContent=d.user.name||d.user.email;w.classList.remove('hidden')}
     if(isApproved){
       document.getElementById('btn-post').classList.remove('hidden');
     }else{

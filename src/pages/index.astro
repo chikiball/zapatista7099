@@ -5,14 +5,17 @@ import Layout from "../layouts/Layout.astro";
 <Layout title="7099 - Alumni SMU 70 Angkatan 99">
   <!-- Navigation -->
   <nav class="bg-white shadow-sm sticky top-0 z-50">
-    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-      <a href="/" class="block"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
-      <button type="button" class="md:hidden p-2" id="menu-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2 min-w-0">
+        <a href="/" class="block shrink-0"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a>
+        <span id="nav-welcome" class="hidden text-sm text-stone-500 truncate">Welcome, <span id="nav-welcome-name" class="font-semibold text-amber-900"></span></span>
+      </div>
+      <button type="button" class="md:hidden p-2 shrink-0" id="menu-toggle" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
       </button>
-      <ul class="hidden md:flex space-x-6 text-sm font-medium text-gray-600">
+      <ul class="hidden md:flex items-center space-x-6 text-sm font-medium text-gray-600">
         <li><a href="/" class="hover:text-amber-800">Home</a></li>
         <li><a href="/directory" class="hover:text-amber-800">Directory</a></li>
         <li><a href="/map" class="hover:text-amber-800">Map</a></li>
@@ -20,7 +23,7 @@ import Layout from "../layouts/Layout.astro";
         <li><a href="/events" class="hover:text-amber-800">Events</a></li>
         <li><a href="/gallery" class="hover:text-amber-800">Gallery</a></li>
         <li><a href="/forum" class="hover:text-amber-800">Forum</a></li>
-        <li><a href="/login" class="text-amber-700 font-semibold hover:text-amber-900">Masuk</a></li>
+        <li><a href="/login" id="nav-login" class="text-amber-700 font-semibold hover:text-amber-900">Masuk</a></li>
       </ul>
     </div>
     <!-- Mobile menu -->
@@ -32,9 +35,14 @@ import Layout from "../layouts/Layout.astro";
       <a href="/events" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Events</a>
       <a href="/gallery" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Gallery</a>
       <a href="/forum" class="block py-2 text-sm text-gray-600 hover:text-amber-800">Forum</a>
-      <a href="/login" class="block py-2 text-sm text-amber-700 font-semibold">Masuk / Daftar</a>
+      <a href="/login" id="nav-login-mobile" class="block py-2 text-sm text-amber-700 font-semibold">Masuk / Daftar</a>
     </div>
   </nav>
+
+  <!-- Incomplete-profile nudge (shown to logged-in users missing required fields) -->
+  <a href="/profile" id="complete-profile-banner" class="hidden block bg-amber-100 border-b border-amber-200 text-amber-900 text-sm text-center px-4 py-2 hover:bg-amber-200 transition">
+    Profil kamu belum lengkap<span id="complete-profile-missing"></span>. <span class="font-semibold underline">Lengkapi sekarang →</span>
+  </a>
 
   <!-- Hero Section -->
   <section style="background:linear-gradient(135deg,#c4ad93,#b39c82,#a38d74)" class="text-white py-20 px-4">
@@ -43,7 +51,7 @@ import Layout from "../layouts/Layout.astro";
       <p id="years-since" class="text-xl md:text-2xl opacity-90 mb-2">27 Tahun Kemudian, Tetap Terhubung</p>
       <p class="text-lg opacity-75 mb-8">Menghubungkan kembali teman-teman SMA kita</p>
       <div class="flex flex-col sm:flex-row gap-4 justify-center">
-        <a href="/login" class="bg-white text-amber-900 px-8 py-3 rounded-full font-semibold hover:bg-amber-50 transition">Masuk / Daftar</a>
+        <a href="/login" id="hero-cta" class="bg-white text-amber-900 px-8 py-3 rounded-full font-semibold hover:bg-amber-50 transition">Masuk / Daftar</a>
         <a href="/map" class="border-2 border-white text-white px-8 py-3 rounded-full font-semibold hover:bg-white/10 transition">Lihat Peta</a>
       </div>
     </div>
@@ -125,5 +133,26 @@ import Layout from "../layouts/Layout.astro";
     </div>
     <style>a[aria-label="Du-Du Wall"]:hover{transform:rotate(0deg) scale(1.1)!important}</style>
   </a>
-  <script is:inline>document.getElementById("years-since").textContent=(new Date().getFullYear()-1999)+" Tahun Kemudian, Tetap Terhubung";fetch("/api/stats").then(function(r){return r.json()}).then(function(d){document.getElementById("stat-alumni").textContent=d.total_alumni;document.getElementById("stat-cities").textContent=d.total_cities;document.getElementById("stat-industries").textContent=d.total_industries;document.getElementById("stat-countries").textContent=d.total_countries}).catch(function(){})</script>
+  <script is:inline>document.getElementById("years-since").textContent=(new Date().getFullYear()-1999)+" Tahun Kemudian, Tetap Terhubung";fetch("/api/stats").then(function(r){return r.json()}).then(function(d){document.getElementById("stat-alumni").textContent=d.total_alumni;document.getElementById("stat-cities").textContent=d.total_cities;document.getElementById("stat-industries").textContent=d.total_industries;document.getElementById("stat-countries").textContent=d.total_countries}).catch(function(){});
+  // Auth-aware nav: Masuk → Profile, greet by name, hide login CTAs, nudge incomplete profiles.
+  fetch("/api/auth/me",{credentials:"include"}).then(function(r){return r.ok?r.json():null}).then(function(d){
+    if(!d||!d.user)return;
+    var name=d.user.name||d.user.email||"";
+    var login=document.getElementById("nav-login");
+    if(login){login.textContent="Profile";login.href="/profile"}
+    var loginM=document.getElementById("nav-login-mobile");
+    if(loginM){loginM.textContent="Profile";loginM.href="/profile"}
+    var cta=document.getElementById("hero-cta");
+    if(cta)cta.classList.add("hidden");
+    var w=document.getElementById("nav-welcome");
+    if(w){document.getElementById("nav-welcome-name").textContent=name;w.classList.remove("hidden")}
+    if(!d.profile_complete){
+      var b=document.getElementById("complete-profile-banner");
+      if(b){
+        var miss=(d.missing_fields||[]).map(function(f){return f.label});
+        if(miss.length)document.getElementById("complete-profile-missing").textContent=" — lengkapi "+miss.join(", ");
+        b.classList.remove("hidden");
+      }
+    }
+  }).catch(function(){});</script>
 </Layout>

@@ -377,7 +377,19 @@ app.get("/api/auth/me", authMiddleware, (req, res) => {
   if (user.alumni_id) {
     profile = db.prepare("SELECT * FROM alumni WHERE id = ?").get(user.alumni_id);
   }
-  res.json({ user, profile });
+  // Profile completeness — core fields that power the Map, Directory & Stats.
+  // missing_fields lists only the empty required ones (so the UI can nudge specifics).
+  const REQUIRED = [
+    { key: "name", label: "Nama" },
+    { key: "city", label: "Kota" },
+    { key: "country", label: "Negara" },
+    { key: "job_title", label: "Pekerjaan" },
+    { key: "class", label: "Kelas" },
+  ];
+  const isFilled = (v) => v !== null && v !== undefined && String(v).trim() !== "";
+  const missing_fields = REQUIRED.filter((f) => !(profile && isFilled(profile[f.key])));
+  const profile_complete = missing_fields.length === 0;
+  res.json({ user, profile, profile_complete, missing_fields });
 });
 
 // Logout

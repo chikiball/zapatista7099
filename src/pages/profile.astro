@@ -10,6 +10,10 @@ import Layout from "../layouts/Layout.astro";
     <nav class="bg-white shadow-sm sticky top-0 z-50"><div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between"><a href="/" class="text-xl font-bold text-amber-900"><img src="/logo-nav.png" alt="Alumni 7099" style="height:32px"></a><div class="flex items-center gap-4"><span class="text-sm text-stone-600" id="nav-name"></span><button type="button" onclick="logout()" class="text-sm text-red-600 hover:underline">Keluar</button></div></div></nav>
 
     <div class="max-w-2xl mx-auto px-4 py-8">
+      <div id="incomplete-banner" class="hidden bg-amber-100 border border-amber-300 rounded-xl p-4 mb-6">
+        <p class="text-amber-900 font-semibold text-sm">Profil kamu belum lengkap.</p>
+        <p class="text-amber-800 text-sm mt-1">Lengkapi data berikut supaya kamu muncul di peta &amp; direktori: <span id="incomplete-fields" class="font-semibold"></span></p>
+      </div>
       <div id="match-banner" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6"><p class="text-amber-800 font-medium text-sm">✅ Data kamu ditemukan di database alumni! Silakan cek dan perbarui jika perlu.</p></div>
 
       <div id="no-match-banner" class="hidden bg-stone-100 border border-stone-200 rounded-xl p-4 mb-6">
@@ -26,7 +30,7 @@ import Layout from "../layouts/Layout.astro";
           <div class="grid md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-stone-700 mb-1">Nama Lengkap *</label>
-              <input type="text" name="name" required class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+              <input type="text" name="name" required data-req class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
             </div>
             <div>
               <label class="block text-sm font-medium text-stone-700 mb-1">Nama Panggilan</label>
@@ -50,15 +54,15 @@ import Layout from "../layouts/Layout.astro";
             </div>
             <div>
               <label class="block text-sm font-medium text-stone-700 mb-1">Kota</label>
-              <input type="text" name="city" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+              <input type="text" name="city" data-req class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
             </div>
             <div>
               <label class="block text-sm font-medium text-stone-700 mb-1">Negara</label>
-              <input type="text" name="country" value="Indonesia" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+              <input type="text" name="country" value="Indonesia" data-req class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
             </div>
             <div>
               <label class="block text-sm font-medium text-stone-700 mb-1">Pekerjaan</label>
-              <input type="text" name="job_title" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+              <input type="text" name="job_title" data-req class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
             </div>
             <div class="md:col-span-2">
               <label class="block text-sm font-medium text-stone-700 mb-1">Alamat</label>
@@ -76,7 +80,7 @@ import Layout from "../layouts/Layout.astro";
               <label class="block text-sm font-medium text-stone-700 mb-1">Hobi &amp; Minat <span class="text-stone-400 font-normal">(pisahkan dengan koma)</span></label>
               <input type="text" name="hobby" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" placeholder="sports, music, photography, cooking">
             </div>
-          <div class="md:col-span-2"><label class="block text-sm font-medium text-stone-700 mb-1">Kelas waktu kelas 3</label><select name="class" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"><option value="">-- Pilih --</option><option value="IPA 1">IPA 1</option><option value="IPA 2">IPA 2</option><option value="IPA 3">IPA 3</option><option value="IPA 4">IPA 4</option><option value="IPA 5">IPA 5</option><option value="IPA 6">IPA 6</option><option value="IPA 7">IPA 7</option><option value="IPA 8">IPA 8</option><option value="IPS 1">IPS 1</option><option value="IPS 2">IPS 2</option><option value="IPS 3">IPS 3</option><option value="IPS 4">IPS 4</option></select></div>
+          <div class="md:col-span-2"><label class="block text-sm font-medium text-stone-700 mb-1">Kelas waktu kelas 3</label><select name="class" data-req class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"><option value="">-- Pilih --</option><option value="IPA 1">IPA 1</option><option value="IPA 2">IPA 2</option><option value="IPA 3">IPA 3</option><option value="IPA 4">IPA 4</option><option value="IPA 5">IPA 5</option><option value="IPA 6">IPA 6</option><option value="IPA 7">IPA 7</option><option value="IPA 8">IPA 8</option><option value="IPS 1">IPS 1</option><option value="IPS 2">IPS 2</option><option value="IPS 3">IPS 3</option><option value="IPS 4">IPS 4</option></select></div>
           </div>
           <button type="submit" class="mt-6 w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition">Simpan</button>
         </form>
@@ -118,13 +122,16 @@ import Layout from "../layouts/Layout.astro";
   <script is:inline>
     var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university","class"];
 
-    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("notify-toggle").checked=d.user.notify_email!==0;if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}}catch(e){showNotLogged()}}
+    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("notify-toggle").checked=d.user.notify_email!==0;if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}showIncomplete(d.missing_fields||[])}catch(e){showNotLogged()}}
+
+    // Nudge for the specific empty required fields (not every field).
+    function showIncomplete(missing){var f=document.getElementById("profile-form");Array.prototype.forEach.call(f.querySelectorAll("[data-req]"),function(el){el.classList.remove("ring-2","ring-amber-400","border-amber-400")});if(!missing.length){document.getElementById("incomplete-banner").classList.add("hidden");return}document.getElementById("incomplete-fields").textContent=missing.map(function(m){return m.label}).join(", ");document.getElementById("incomplete-banner").classList.remove("hidden");missing.forEach(function(m){var el=f.querySelector('[name="'+m.key+'"]');if(el){el.classList.add("ring-2","ring-amber-400","border-amber-400")}})}
 
     function showNotLogged(){document.getElementById("loading").classList.add("hidden");document.getElementById("not-logged").classList.remove("hidden")}
 
     function fillForm(p){var f=document.getElementById("profile-form");FIELDS.forEach(function(k){if(p[k]&&f[k]){if(k==="gender"){f[k].value=p[k]}else{f[k].value=p[k]}}})}
 
-    async function saveProfile(e){e.preventDefault();var f=e.target;var b={};FIELDS.forEach(function(k){b[k]=f[k]?f[k].value:""});try{var r=await fetch("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify(b)});var d=await r.json();if(!r.ok){document.getElementById("save-err").textContent=d.error;document.getElementById("save-err").classList.remove("hidden");return}document.getElementById("save-msg").textContent="✅ Profil berhasil disimpan!";document.getElementById("save-msg").classList.remove("hidden");document.getElementById("save-err").classList.add("hidden");document.getElementById("no-match-banner").classList.add("hidden");document.getElementById("match-banner").classList.remove("hidden");setTimeout(function(){document.getElementById("save-msg").classList.add("hidden")},3000)}catch(e){document.getElementById("save-err").textContent="Gagal menyimpan.";document.getElementById("save-err").classList.remove("hidden")}}
+    async function saveProfile(e){e.preventDefault();var f=e.target;var b={};FIELDS.forEach(function(k){b[k]=f[k]?f[k].value:""});try{var r=await fetch("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify(b)});var d=await r.json();if(!r.ok){document.getElementById("save-err").textContent=d.error;document.getElementById("save-err").classList.remove("hidden");return}document.getElementById("save-msg").textContent="✅ Profil berhasil disimpan!";document.getElementById("save-msg").classList.remove("hidden");document.getElementById("save-err").classList.add("hidden");document.getElementById("no-match-banner").classList.add("hidden");document.getElementById("match-banner").classList.remove("hidden");fetch("/api/auth/me",{credentials:"include"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(d)showIncomplete(d.missing_fields||[])});setTimeout(function(){document.getElementById("save-msg").classList.add("hidden")},3000)}catch(e){document.getElementById("save-err").textContent="Gagal menyimpan.";document.getElementById("save-err").classList.remove("hidden")}}
 
     var st;function searchAlumni(q){clearTimeout(st);if(q.length<2){document.getElementById("search-results").innerHTML="";return}st=setTimeout(async function(){var r=await fetch("/api/alumni/search?q="+encodeURIComponent(q),{credentials:"include"});var d=await r.json();var c=document.getElementById("search-results");if(!d.length){c.innerHTML='<p class="text-sm text-stone-500">Tidak ditemukan. Isi data baru di bawah.</p>';return}c.innerHTML=d.map(function(r){return '<button onclick="linkAlumni('+r.id+')" class="block w-full text-left px-3 py-2 text-sm hover:bg-amber-50 rounded-lg"><b>'+r.name+'</b> ('+r.nickname+') - '+r.city+'</button>'}).join("")},300)}
 

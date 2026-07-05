@@ -57,6 +57,14 @@ import Layout from "../layouts/Layout.astro";
     const GOOGLE_CLIENT_ID = "1035245406806-7dh06iqc9697ssos8tukbho0no2eaut5.apps.googleusercontent.com";
     let isSignup = false;
 
+    // After auth: complete profiles go to the homepage, incomplete ones to /profile.
+    function redirectAfterAuth() {
+      fetch("/api/auth/me", { credentials: "include" })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) { window.location.href = (d && d.profile_complete) ? "/" : "/profile"; })
+        .catch(function() { window.location.href = "/profile"; });
+    }
+
     // Wait for Google SDK to load, then render the button
     function initGoogle() {
       if (typeof google === "undefined") {
@@ -130,7 +138,7 @@ import Layout from "../layouts/Layout.astro";
         } else {
           showSuccess("Berhasil! Redirecting...");
         }
-        setTimeout(function() { window.location.href = "/profile"; }, 1000);
+        setTimeout(function() { redirectAfterAuth(); }, 1000);
       } catch(err) {
         showError("Terjadi kesalahan. Coba lagi.");
       }
@@ -153,7 +161,7 @@ import Layout from "../layouts/Layout.astro";
         } else {
           showSuccess("Login Google berhasil! Redirecting...");
         }
-        setTimeout(function() { window.location.href = "/profile"; }, 1000);
+        setTimeout(function() { redirectAfterAuth(); }, 1000);
       } catch(err) {
         showError("Google login gagal. Coba lagi.");
       }
@@ -170,9 +178,9 @@ import Layout from "../layouts/Layout.astro";
         }).catch(function(){showError('Gagal mengirim email')});
     }
 
-    // Check if already logged in
+    // Already logged in? Route based on profile completeness.
     fetch("/api/auth/me", { credentials: "include" })
-      .then(function(r) { if (r.ok) window.location.href = "/profile"; })
+      .then(function(r) { if (r.ok) redirectAfterAuth(); })
       .catch(function() {});
   </script>
 </Layout>
