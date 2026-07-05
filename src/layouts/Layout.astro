@@ -8,7 +8,7 @@ interface Props {
 const { title } = Astro.props;
 
 // Bump this whenever the favicon / app icons change, to bust browser caches.
-const iconV = '2';
+const iconV = '3';
 ---
 
 <!doctype html>
@@ -17,7 +17,9 @@ const iconV = '2';
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="7099 - Alumni SMAN 70 Jakarta Angkatan 99" />
-    <link rel="icon" type="image/svg+xml" href={`/favicon.svg?v=${iconV}`} />
+    <link rel="icon" href={`/favicon.ico?v=${iconV}`} sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href={`/favicon-32.png?v=${iconV}`} />
+    <link rel="icon" type="image/png" sizes="16x16" href={`/favicon-16.png?v=${iconV}`} />
     <link rel="manifest" href={`/manifest.json?v=${iconV}`} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
