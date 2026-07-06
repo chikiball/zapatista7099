@@ -74,6 +74,8 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 ## Key Systems
 
 - **Auth:** JWT cookies, Google OAuth, approval system (pending/approved/rejected)
+- **Login flow:** `GET /api/auth/me` returns `profile_complete` + `missing_fields` — a profile is "complete" when **Nama, Kota, Negara, Pekerjaan, Kelas** are all filled. After login (`redirectAfterAuth()` in login.astro), complete profiles go to `/`, incomplete ones to `/profile`. Already-logged-in visitors to `/login` are routed the same way.
+- **Auth-aware nav (all pages):** on login, `#nav-login` swaps "Masuk" → "Profile" (→ `/profile`) and a `#nav-welcome` span shows "Welcome, `<Name>`" on the **left next to the logo** (`truncate` + `shrink-0` so it survives narrow viewports). Homepage also hides the "Masuk/Daftar" CTAs and shows a **"Profil kamu belum lengkap"** banner listing the missing fields. Profile page shows the same notice and highlights the specific empty `[data-req]` inputs.
 - **Admin:** Dashboard, approval queue, alumni/user management, events management, articles management, settings (SMTP + Telegram)
 - **Telegram:** Bot notifies group on new registration
 - **Email:** Welcome, approval, rejection, password reset, new article/event notifications, forum reply/mention notifications, du-du mention notifications (SMTP: dr6101.inweb.id)
@@ -107,7 +109,7 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - Forum deep-links: `/forum?thread=X`, `/forum?category=X`
 - Caveat web font loaded from Google Fonts in Layout.astro for consistent cursive rendering across devices (iOS/Android/desktop)
 - Du-Du wall uses **JS-driven flex-column masonry** — each card is appended to the currently shortest column. Do NOT use CSS `columns:` with rotated cards — `break-inside: avoid` is unreliable with transforms.
-- **Icon cache-busting:** favicon/manifest/apple-touch links in `Layout.astro` carry a `?v=${iconV}` query, driven by the `iconV` constant in the frontmatter. When you replace any icon asset (favicon.svg, icon-180/192/512.png, manifest.json), **bump `iconV`** so browsers refetch instead of serving the stale cached icon.
+- **Icon cache-busting:** favicon/manifest/apple-touch links in `Layout.astro` carry a `?v=${iconV}` query, driven by the `iconV` constant in the frontmatter. When you replace any icon asset, **bump `iconV`** so browsers refetch instead of serving the stale cached icon. The browser tab favicon is `favicon.ico` + `favicon-16/32.png` (generated from `icon-512.png` via sharp — NOT the old Astro placeholder `favicon.svg`, which browsers preferred over PNGs).
 - **Map:** `/map` uses **Mapbox GL JS v3** (`projection: 'globe'`, `streets-v12` style) with native GeoJSON clustering and red translucent pins. Public `pk.` token is inline in `map.astro` — must be **URL-restricted** in the Mapbox account. The starburst name cards are a login-gated DOM overlay positioned via `map.project()`; `/api/map` is unchanged.
 
 ## Deploy

@@ -11,10 +11,10 @@
 | Feature | Status | URL |
 |---------|--------|-----|
 | Homepage with dynamic stats + floating du-du bubble + auto-incrementing years-since | ✅ | `/` |
-| Login (Email + Google OAuth) | ✅ | `/login` |
+| Login (Email + Google OAuth, redirects by profile completeness) | ✅ | `/login` |
 | Password Reset | ✅ | `/reset` |
-| Profile (auto-match alumni DB, edit, photo upload) | ✅ | `/profile` |
-| Interactive Globe Map | ✅ | `/map` |
+| Profile (auto-match alumni DB, edit, photo upload, completeness nudge) | ✅ | `/profile` |
+| Interactive Globe Map (Mapbox GL) | ✅ | `/map` |
 | Directory (browse alumni, login-gated) | ✅ | `/directory` |
 | Statistics / Charts | ✅ | `/stats` |
 | Articles (cover + inline images/videos, lightbox) | ✅ | `/articles` |
@@ -34,7 +34,7 @@
 | Frontend | Astro v6 + Tailwind CSS v4 |
 | Backend API | Node.js Express (`api/server.cjs`) |
 | Database | SQLite via `better-sqlite3` |
-| Globe/Map | D3.js + Canvas + TopoJSON |
+| Globe/Map | Mapbox GL JS v3 (globe projection, native clustering) |
 | Auth | JWT (HttpOnly cookies) + Google Sign-In |
 | Image Processing | sharp (resize to 800px, JPEG 80%) |
 | Video | HTML5 `<video>` via `[video:]` tag, ffmpeg for frame extraction |
@@ -109,7 +109,7 @@ pm2 restart alumni-api  # if API changed
 | `/api/auth/signup` | POST | No | Email/password signup |
 | `/api/auth/login` | POST | No | Email/password login |
 | `/api/auth/google` | POST | No | Google Sign-In |
-| `/api/auth/me` | GET | Yes | Current user + profile + notify_email |
+| `/api/auth/me` | GET | Yes | Current user + profile + `profile_complete` + `missing_fields` |
 | `/api/auth/logout` | POST | No | Clear auth cookie |
 | `/api/auth/forgot` | POST | No | Send password reset email |
 | `/api/auth/reset` | POST | No | Reset password with token |
