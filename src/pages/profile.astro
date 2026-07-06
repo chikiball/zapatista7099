@@ -101,6 +101,29 @@ import Layout from "../layouts/Layout.astro";
       </div>
       <div class="text-center mt-6"><a href="/" class="text-sm text-amber-700 hover:underline">&larr; Kembali ke Beranda</a></div>
 
+      <!-- Password -->
+      <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
+        <h2 class="text-xl font-bold text-stone-800 mb-1" id="pw-title">Ganti Password</h2>
+        <p class="text-xs text-stone-400 mb-4" id="pw-subtitle">Ubah password login email kamu.</p>
+        <div id="pw-msg" class="hidden bg-green-50 text-green-700 text-sm p-3 rounded-lg mb-4"></div>
+        <div id="pw-err" class="hidden bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-4"></div>
+        <form id="pw-form" onsubmit="changePassword(event)">
+          <div id="pw-current-wrap" class="mb-4">
+            <label class="block text-sm font-medium text-stone-700 mb-1">Password Saat Ini</label>
+            <input type="password" id="pw-current" autocomplete="current-password" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-stone-700 mb-1">Password Baru</label>
+            <input type="password" id="pw-new" required minlength="6" autocomplete="new-password" placeholder="Min. 6 karakter" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-stone-700 mb-1">Ulangi Password Baru</label>
+            <input type="password" id="pw-confirm" required minlength="6" autocomplete="new-password" placeholder="Ketik ulang password baru" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+          </div>
+          <button type="submit" id="pw-submit" class="w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition">Ganti Password</button>
+        </form>
+      </div>
+
       <!-- Notification Settings -->
       <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8 mt-6">
         <h2 class="text-xl font-bold text-stone-800 mb-4">Notifikasi</h2>
@@ -122,12 +145,43 @@ import Layout from "../layouts/Layout.astro";
   <script is:inline>
     var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university","class"];
 
-    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("notify-toggle").checked=d.user.notify_email!==0;if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}showIncomplete(d.missing_fields||[])}catch(e){showNotLogged()}}
+    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include"});if(!r.ok){showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("notify-toggle").checked=d.user.notify_email!==0;setupPasswordCard(!!d.user.has_password);if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}showIncomplete(d.missing_fields||[])}catch(e){showNotLogged()}}
 
     // Nudge for the specific empty required fields (not every field).
     function showIncomplete(missing){var f=document.getElementById("profile-form");Array.prototype.forEach.call(f.querySelectorAll("[data-req]"),function(el){el.classList.remove("ring-2","ring-amber-400","border-amber-400")});if(!missing.length){document.getElementById("incomplete-banner").classList.add("hidden");return}document.getElementById("incomplete-fields").textContent=missing.map(function(m){return m.label}).join(", ");document.getElementById("incomplete-banner").classList.remove("hidden");missing.forEach(function(m){var el=f.querySelector('[name="'+m.key+'"]');if(el){el.classList.add("ring-2","ring-amber-400","border-amber-400")}})}
 
     function showNotLogged(){document.getElementById("loading").classList.add("hidden");document.getElementById("not-logged").classList.remove("hidden")}
+
+    // "Ganti Password" for accounts that have one; "Buat Password" for Google-only accounts.
+    var hasPassword=true;
+    function setupPasswordCard(has){
+      hasPassword=has;
+      document.getElementById("pw-title").textContent=has?"Ganti Password":"Buat Password";
+      document.getElementById("pw-subtitle").textContent=has?"Ubah password login email kamu.":"Akun kamu login lewat Google. Buat password agar bisa juga login pakai email.";
+      document.getElementById("pw-submit").textContent=has?"Ganti Password":"Buat Password";
+      var cur=document.getElementById("pw-current-wrap");
+      if(has){cur.classList.remove("hidden")}else{cur.classList.add("hidden")}
+    }
+    async function changePassword(e){
+      e.preventDefault();
+      var msg=document.getElementById("pw-msg"),err=document.getElementById("pw-err");
+      msg.classList.add("hidden");err.classList.add("hidden");
+      var cur=document.getElementById("pw-current").value,n1=document.getElementById("pw-new").value,n2=document.getElementById("pw-confirm").value;
+      if(n1.length<6){err.textContent="Password baru minimal 6 karakter";err.classList.remove("hidden");return}
+      if(n1!==n2){err.textContent="Konfirmasi password tidak sama";err.classList.remove("hidden");return}
+      if(hasPassword&&!cur){err.textContent="Isi password saat ini";err.classList.remove("hidden");return}
+      try{
+        var body={new_password:n1};if(hasPassword)body.current_password=cur;
+        var r=await fetch("/api/auth/change-password",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify(body)});
+        var d=await r.json();
+        if(!r.ok){err.textContent=d.error||"Gagal mengubah password";err.classList.remove("hidden");return}
+        document.getElementById("pw-form").reset();
+        setupPasswordCard(true);
+        msg.textContent=d.had_password?"✅ Password berhasil diganti!":"✅ Password berhasil dibuat! Sekarang kamu bisa login pakai email juga.";
+        msg.classList.remove("hidden");
+        setTimeout(function(){msg.classList.add("hidden")},4000);
+      }catch(e){err.textContent="Terjadi kesalahan. Coba lagi.";err.classList.remove("hidden")}
+    }
 
     function fillForm(p){var f=document.getElementById("profile-form");FIELDS.forEach(function(k){if(p[k]&&f[k]){if(k==="gender"){f[k].value=p[k]}else{f[k].value=p[k]}}})}
 

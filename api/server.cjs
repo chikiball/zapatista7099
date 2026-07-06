@@ -370,7 +370,7 @@ app.post("/api/auth/google", async (req, res) => {
 
 // Get current user
 app.get("/api/auth/me", authMiddleware, (req, res) => {
-  const user = db.prepare("SELECT id, email, name, alumni_id, role, status, created_at, notify_email FROM users WHERE id = ?").get(req.user.id);
+  const user = db.prepare("SELECT id, email, name, alumni_id, role, status, created_at, notify_email, (password_hash IS NOT NULL) AS has_password FROM users WHERE id = ?").get(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
   let profile = null;
@@ -841,6 +841,25 @@ app.post("/api/auth/reset-password", (req, res) => {
     db.prepare("UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?").run(hash, user.id);
     res.json({ success: true });
   } catch(e) { console.error("Reset password error:", e); res.status(500).json({ error: "Failed" }); }
+});
+
+// Change password (logged in). Sets a new password; if the account already has one,
+// the current password must be provided and match. Google-only accounts can set one
+// without a current password (gains an email-login fallback).
+app.post("/api/auth/change-password", authMiddleware, (req, res) => {
+  try {
+    var { current_password, new_password } = req.body || {};
+    if (!new_password || new_password.length < 6) return res.status(400).json({ error: "Password baru minimal 6 karakter" });
+    var user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (user.password_hash) {
+      if (!current_password) return res.status(400).json({ error: "Password saat ini wajib diisi" });
+      if (!bcrypt.compareSync(current_password, user.password_hash)) return res.status(401).json({ error: "Password saat ini salah" });
+    }
+    var hash = bcrypt.hashSync(new_password, 10);
+    db.prepare("UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?").run(hash, user.id);
+    res.json({ success: true, had_password: !!user.password_hash });
+  } catch(e) { console.error("Change password error:", e); res.status(500).json({ error: "Gagal mengubah password" }); }
 });
 
 // ── ADMIN ROUTES ────────────────────────────────────
