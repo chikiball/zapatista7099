@@ -114,7 +114,8 @@ pm2 restart alumni-api  # if API changed
 |----------|--------|------|-------------|
 | `/api/auth/signup` | POST | No | Email/password signup |
 | `/api/auth/login` | POST | No | Email/password login |
-| `/api/auth/google` | POST | No | Google Sign-In |
+| `/api/auth/google` | POST | No | Google Sign-In (returns `needs_reg_info` for new users) |
+| `/api/auth/complete-registration` | POST | Yes | Post-Google: save name + ≥1 Kelas |
 | `/api/auth/me` | GET | Yes | Current user + profile + `profile_complete` + `missing_fields` |
 | `/api/auth/logout` | POST | No | Clear auth cookie |
 | `/api/auth/forgot` | POST | No | Send password reset email |
