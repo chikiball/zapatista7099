@@ -53,7 +53,7 @@ import Layout from "../layouts/Layout.astro";
     <!-- Users -->
     <div id="tab-users" class="hidden p-4 max-w-5xl mx-auto">
       <div class="overflow-x-auto"><table class="w-full text-sm">
-        <thead><tr class="bg-stone-100 text-left"><th class="p-2">Email</th><th class="p-2">Nama</th><th class="p-2">Status</th><th class="p-2">Role</th><th class="p-2">Terdaftar</th><th class="p-2 w-20"></th></tr></thead>
+        <thead><tr class="bg-stone-100 text-left"><th class="p-2">Email</th><th class="p-2">Nama</th><th class="p-2">Login</th><th class="p-2">Status</th><th class="p-2">Role</th><th class="p-2">Terdaftar</th><th class="p-2 w-20"></th></tr></thead>
         <tbody id="usr-body"></tbody>
       </table></div>
     </div>
@@ -249,7 +249,8 @@ import Layout from "../layouts/Layout.astro";
     document.getElementById('usr-body').innerHTML=usersData.map(function(u){
       var sc=u.status==='approved'?'text-green-700':u.status==='rejected'?'text-red-600':'text-amber-600';
       var rc=u.role==='admin'?'text-purple-700':'text-stone-500';
-      return '<tr class="border-b hover:bg-stone-50"><td class="p-2 text-xs">'+u.email+'</td><td class="p-2">'+(u.name||'-')+'</td><td class="p-2"><select onchange="changeUserStatus('+u.id+',this.value)" class="text-xs border rounded px-1 py-0.5 '+sc+'"><option value="pending"'+(u.status==='pending'?' selected':'')+'>Pending</option><option value="approved"'+(u.status==='approved'?' selected':'')+'>Approved</option><option value="rejected"'+(u.status==='rejected'?' selected':'')+'>Rejected</option></select></td><td class="p-2"><select onchange="changeUserRole('+u.id+',this.value)" class="text-xs border rounded px-1 py-0.5 '+rc+'"><option value="user"'+(u.role==='user'?' selected':'')+'>User</option><option value="admin"'+(u.role==='admin'?' selected':'')+'>Admin</option></select></td><td class="p-2 text-xs text-stone-400">'+timeAgo(u.created_at)+'</td><td class="p-2"><button type="button" onclick="delUser('+u.id+')" class="text-red-500 text-xs hover:underline">Del</button></td></tr>';
+      var methods=[];if(u.google_id)methods.push('<span class="inline-block bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 text-[10px]">Google</span>');if(u.has_password)methods.push('<span class="inline-block bg-stone-100 text-stone-600 rounded px-1.5 py-0.5 text-[10px]">Email</span>');var methodCell=methods.length?methods.join(' '):'<span class="text-stone-300 text-xs">-</span>';
+      return '<tr class="border-b hover:bg-stone-50"><td class="p-2 text-xs">'+u.email+'</td><td class="p-2">'+(u.name||'-')+'</td><td class="p-2 whitespace-nowrap">'+methodCell+'</td><td class="p-2"><select onchange="changeUserStatus('+u.id+',this.value)" class="text-xs border rounded px-1 py-0.5 '+sc+'"><option value="pending"'+(u.status==='pending'?' selected':'')+'>Pending</option><option value="approved"'+(u.status==='approved'?' selected':'')+'>Approved</option><option value="rejected"'+(u.status==='rejected'?' selected':'')+'>Rejected</option></select></td><td class="p-2"><select onchange="changeUserRole('+u.id+',this.value)" class="text-xs border rounded px-1 py-0.5 '+rc+'"><option value="user"'+(u.role==='user'?' selected':'')+'>User</option><option value="admin"'+(u.role==='admin'?' selected':'')+'>Admin</option></select></td><td class="p-2 text-xs text-stone-400">'+timeAgo(u.created_at)+'</td><td class="p-2"><button type="button" onclick="delUser('+u.id+')" class="text-red-500 text-xs hover:underline">Del</button></td></tr>';
     }).join('');
   }
   function changeUserStatus(id,s){fetch('/api/admin/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({status:s})}).then(function(){loadUsers();loadDashboard()})}
