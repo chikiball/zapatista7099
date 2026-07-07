@@ -12,6 +12,7 @@
 |---------|--------|-----|
 | Homepage with dynamic stats + floating du-du bubble + auto-incrementing years-since | ✅ | `/` |
 | Login (Email + Google OAuth, redirects by profile completeness) | ✅ | `/login` |
+| Signup requires full name + ≥1 Kelas (shown to admin for identification) | ✅ | `/login` |
 | Password Reset | ✅ | `/reset` |
 | Profile (auto-match alumni DB, edit, photo upload, completeness nudge) | ✅ | `/profile` |
 | Interactive Globe Map (Mapbox GL) | ✅ | `/map` |
@@ -202,8 +203,8 @@ pm2 restart alumni-api  # if API changed
 
 | Table | Key Columns |
 |-------|-------------|
-| `alumni` | name, city, country, latitude, longitude, job_title, company, class |
-| `users` | email, role, status, alumni_id, notify_email, unsubscribe_token |
+| `alumni` | name, city, country, latitude, longitude, job_title, company, class, class1, class2 |
+| `users` | email, role, status, alumni_id, notify_email, unsubscribe_token, reg_class1/2/3 |
 | `articles` | title, content, status, cover_image, author_id |
 | `events` | title, description, event_date, location, cover_image, created_by |
 | `event_rsvp` | event_id, alumni_id |
