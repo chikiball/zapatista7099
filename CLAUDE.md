@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 7099 Project Context — For AI Assistants
 
 > Load this file at the start of a new conversation to resume work.
-> Last updated: 2026-05-12
+> Last updated: 2026-07-07
 
 ## What Is This
 
@@ -81,7 +81,7 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - **Email:** Welcome, approval, rejection, password reset, new article/event notifications, forum reply/mention notifications, du-du mention notifications (SMTP: dr6101.inweb.id)
 - **Email notifications:** Broadcast to all approved users with `notify_email=1` via `sendNewsletterEmail()`. One-click unsubscribe via `GET /api/unsubscribe?token=xxx`. Toggle in profile page.
 - **Map:** Mapbox GL JS v3 globe projection (`streets-v12`), red translucent pins, native clustering, login-gated starburst cards, city labels
-- **Stats:** 12 sections with scroll animations, normalized jobs/industries/universities
+- **Stats:** 12 sections with scroll animations, normalized jobs/industries/universities. **IPA vs IPS** and **Kelas Paling Rame** count **registered users only** (alumni linked to a `users` row) — the roster import added ~285 non-registered alumni that would otherwise skew class stats; all other stats use the full public roster. All count endpoints (`/api/stats`, `/api/stats/detail`, map, directory) filter `is_public = 1` so every page shows the same alumni total (see the is_public note below).
 - **Articles:** Magazine layout, masonry photo gallery, lightbox with swipe, inline image/video upload (sharp resize), auto-link URLs, `[foto:]` and `[video:]` tag system. 95 Instagram posts imported as articles under author "Zapatista7099_Insta".
 - **Events:** RSVP toggle, cover + inline images, `[foto:]` tag system, lightbox. Any approved user can create; only admin can delete; creator/admin can edit. Date tapping downloads `.ics`. Location links to Google Maps.
 - **Gallery:** Folder-based photo gallery. 6 display modes: Polaroid, Magazine Editorial, Filmstrip, Feed, Slideshow, Yearbook. Layout stored per folder (admin sets it). Upload: any approved user. Delete: admin only. Seeded: "Yearbook" (239 portraits) + "Instagram Archive" (129 photos).
@@ -111,6 +111,8 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - Du-Du wall uses **JS-driven flex-column masonry** — each card is appended to the currently shortest column. Do NOT use CSS `columns:` with rotated cards — `break-inside: avoid` is unreliable with transforms.
 - **Icon cache-busting:** favicon/manifest/apple-touch links in `Layout.astro` carry a `?v=${iconV}` query, driven by the `iconV` constant in the frontmatter. When you replace any icon asset, **bump `iconV`** so browsers refetch instead of serving the stale cached icon. The browser tab favicon is `favicon.ico` + `favicon-16/32.png` (generated from `icon-512.png` via sharp — NOT the old Astro placeholder `favicon.svg`, which browsers preferred over PNGs).
 - **Map:** `/map` uses **Mapbox GL JS v3** (`projection: 'globe'`, `streets-v12` style) with native GeoJSON clustering and red translucent pins. Public `pk.` token is inline in `map.astro` — must be **URL-restricted** in the Mapbox account. The starburst name cards are a login-gated DOM overlay positioned via `map.project()`; `/api/map` is unchanged.
+- **`is_public` / alumni count:** the DB holds 508 alumni rows but one (`Zapatista7099_Insta`, the Instagram-articles author) has `is_public = 0`, so the real, listable count is **507**. Every count/list endpoint filters `WHERE is_public = 1` — keep it that way so the homepage, stats, map, and directory stay consistent (don't count the bot).
+- **Profile save feedback:** the `#save-msg`/`#save-err` banners render **directly below the "Simpan" button** (not above the form) so the user sees confirmation where they clicked.
 
 ## Deploy
 
@@ -131,6 +133,12 @@ pm2 restart alumni-api  # if API changed
 |--------|---------|
 | `import-insta.cjs` | Import 95 Instagram folders → articles (run on server, requires ffmpeg) |
 | `seed-gallery.cjs` | Seed Yearbook + Instagram Archive gallery folders (run on server) |
+| `merge-dryrun.cjs` | Alumni roster merge: multi-pass name matching (registered-user aware), writes `merge-plan.json` |
+| `make-review-files.cjs` | Emit human-reviewable decision CSVs to `merge-review/` from the plan |
+| `build-actions.cjs` | Resolve review decisions → concrete op list `merge-actions.json` |
+| `apply-actions.cjs` | Backup + transactional apply of `merge-actions.json` (runtime safety guards) |
+
+> The `merge-*` scripts imported `merged_classes_ed.csv` (490-row class roster) on 2026-07-07, taking alumni from 225 → 508. Only `name/class/nickname/birthday` were imported (addresses/phones dropped). Registered users' records and the `users` table were never touched; 2 pre-existing duplicates were removed. Raw/personal data (roster CSV, review CSVs, user dumps, plan/actions JSON) is **gitignored** — only the reusable tooling is tracked. A timestamped DB backup lives at `api/alumni.backup-*.db` on the server.
 
 ## What's NOT Built Yet
 

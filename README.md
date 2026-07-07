@@ -16,7 +16,7 @@
 | Profile (auto-match alumni DB, edit, photo upload, completeness nudge) | ✅ | `/profile` |
 | Interactive Globe Map (Mapbox GL) | ✅ | `/map` |
 | Directory (browse alumni, login-gated) | ✅ | `/directory` |
-| Statistics / Charts | ✅ | `/stats` |
+| Statistics / Charts (class stats = registered users only) | ✅ | `/stats` |
 | Articles (cover + inline images/videos, lightbox) | ✅ | `/articles` |
 | Events (RSVP, images, .ics calendar, maps link) | ✅ | `/events` |
 | Gallery (folders, 6 view modes, admin layout control) | ✅ | `/gallery` |
@@ -69,7 +69,11 @@
 │   └── server.cjs             # Express API (CommonJS)
 ├── scripts/
 │   ├── import-insta.cjs       # One-time: Instagram folders → articles
-│   └── seed-gallery.cjs       # One-time: seed Yearbook + Instagram gallery folders
+│   ├── seed-gallery.cjs       # One-time: seed Yearbook + Instagram gallery folders
+│   ├── merge-dryrun.cjs       # Alumni roster merge: name matching → merge-plan.json
+│   ├── make-review-files.cjs  # Emit reviewable decision CSVs (merge-review/)
+│   ├── build-actions.cjs      # Resolve decisions → merge-actions.json
+│   └── apply-actions.cjs      # Backup + transactional apply (safety-guarded)
 ├── public/
 │   ├── photos/                # Uploaded images (symlinked from dist/photos)
 │   ├── manifest.json          # PWA manifest
