@@ -655,10 +655,10 @@ app.get("/api/health", (req, res) => {
 
 app.get("/api/stats", (req, res) => {
   res.json({
-    total_alumni: db.prepare("SELECT COUNT(*) as c FROM alumni").get().c,
-    total_cities: db.prepare("SELECT COUNT(DISTINCT city) as c FROM alumni WHERE city IS NOT NULL AND city != ''").get().c,
-    total_industries: db.prepare("SELECT COUNT(DISTINCT company) as c FROM alumni WHERE company IS NOT NULL AND company != ''").get().c,
-    total_countries: db.prepare("SELECT COUNT(DISTINCT country) as c FROM alumni WHERE country IS NOT NULL AND country != ''").get().c,
+    total_alumni: db.prepare("SELECT COUNT(*) as c FROM alumni WHERE is_public = 1").get().c,
+    total_cities: db.prepare("SELECT COUNT(DISTINCT city) as c FROM alumni WHERE is_public = 1 AND city IS NOT NULL AND city != ''").get().c,
+    total_industries: db.prepare("SELECT COUNT(DISTINCT company) as c FROM alumni WHERE is_public = 1 AND company IS NOT NULL AND company != ''").get().c,
+    total_countries: db.prepare("SELECT COUNT(DISTINCT country) as c FROM alumni WHERE is_public = 1 AND country IS NOT NULL AND country != ''").get().c,
   });
 });
 
