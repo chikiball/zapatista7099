@@ -7,3 +7,13 @@ dist/
 insta_resource/
 yearbook_portraits/
 *~
+# SQLite WAL sidecars
+*.db-shm
+*.db-wal
+# Alumni merge — raw/personal data kept OUT of git (emails, addresses, phones, birthdays)
+/merged_classes_ed.csv
+/merge-review/
+scripts/srv-users.json
+scripts/live-users2.json
+scripts/merge-plan.json
+scripts/merge-actions.json
