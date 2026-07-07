@@ -13,6 +13,7 @@
 | Homepage with dynamic stats + floating du-du bubble + auto-incrementing years-since | ✅ | `/` |
 | Login (Email + Google OAuth, redirects by profile completeness) | ✅ | `/login` |
 | Signup requires full name + ≥1 Kelas (shown to admin for identification) | ✅ | `/login` |
+| In-app browser guard (WhatsApp/IG/etc → open in Chrome/Safari) | ✅ | all / `/login` |
 | Password Reset | ✅ | `/reset` |
 | Profile (auto-match alumni DB, edit, photo upload, completeness nudge) | ✅ | `/profile` |
 | Interactive Globe Map (Mapbox GL) | ✅ | `/map` |
