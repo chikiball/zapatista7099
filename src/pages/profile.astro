@@ -24,8 +24,6 @@ import Layout from "../layouts/Layout.astro";
 
       <div class="bg-white rounded-2xl shadow-lg p-6 md:p-8">
         <h2 class="text-xl font-bold text-stone-800 mb-6">Data Profil</h2>
-        <div id="save-msg" class="hidden bg-green-50 text-green-700 text-sm p-3 rounded-lg mb-4"></div>
-        <div id="save-err" class="hidden bg-red-50 text-red-700 text-sm p-3 rounded-lg mb-4"></div>
         <form id="profile-form" onsubmit="saveProfile(event)">
           <div class="grid md:grid-cols-2 gap-4">
             <div>
@@ -83,6 +81,8 @@ import Layout from "../layouts/Layout.astro";
           <div class="md:col-span-2"><label class="block text-sm font-medium text-stone-700 mb-1">Kelas waktu kelas 3</label><select name="class" data-req class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white"><option value="">-- Pilih --</option><option value="IPA 1">IPA 1</option><option value="IPA 2">IPA 2</option><option value="IPA 3">IPA 3</option><option value="IPA 4">IPA 4</option><option value="IPA 5">IPA 5</option><option value="IPA 6">IPA 6</option><option value="IPA 7">IPA 7</option><option value="IPA 8">IPA 8</option><option value="IPS 1">IPS 1</option><option value="IPS 2">IPS 2</option><option value="IPS 3">IPS 3</option><option value="IPS 4">IPS 4</option><option value="Lainnya">Lainnya</option></select></div>
           </div>
           <button type="submit" class="mt-6 w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition">Simpan</button>
+          <div id="save-msg" class="hidden bg-green-50 text-green-700 text-sm p-3 rounded-lg mt-4"></div>
+          <div id="save-err" class="hidden bg-red-50 text-red-700 text-sm p-3 rounded-lg mt-4"></div>
         </form>
       </div>
 
