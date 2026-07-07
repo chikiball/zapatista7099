@@ -387,7 +387,10 @@ app.post("/api/auth/google", async (req, res) => {
       user: { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id },
       profile_complete: isProfileComplete(user),
       token, // returned so the post-Google completion call can use Bearer (Safari private-mode safe)
-      needs_reg_info: !user.alumni_id && !(user.reg_class1 || user.reg_class2 || user.reg_class3),
+      // Show the name/kelas modal whenever it hasn't been captured yet — regardless of
+      // any (possibly wrong, fuzzy) alumni match — for new signups or still-unlinked users,
+      // so admins always get identifying info. Established linked users aren't pestered.
+      needs_reg_info: !(user.reg_class1 || user.reg_class2 || user.reg_class3) && (isNewUser || !user.alumni_id),
       alumni_match: alumniMatch ? { id: alumniMatch.id, name: alumniMatch.name, nickname: alumniMatch.nickname } : null,
     });
   } catch(e) {
