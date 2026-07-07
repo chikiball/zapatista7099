@@ -21,6 +21,26 @@ const iconV = '3';
       if (location.protocol === "http:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
         location.replace("https://" + location.host + location.pathname + location.search + location.hash);
       }
+      // Detect in-app browsers (WhatsApp/IG/FB/Line/TikTok/Twitter/Android WebView).
+      // These break Google Sign-In (disallowed_useragent) and drop cookies, so we
+      // steer users to a real browser. Helpers used by the banner + /login interstitial.
+      (function () {
+        var ua = navigator.userAgent || "";
+        window.__inAppBrowser = /(WhatsApp|Instagram|FBAN|FBAV|FB_IAB|Line\/|musical_ly|BytedanceWebview|TikTok|Twitter|GSA\/|; wv\))/i.test(ua);
+        window.__isAndroid = /Android/i.test(ua);
+        window.__openExternal = function () {
+          if (window.__isAndroid) {
+            location.href = "intent://" + location.host + location.pathname + location.search +
+              "#Intent;scheme=https;package=com.android.chrome;end";
+          }
+        };
+        window.__copyLink = function (btn) {
+          var u = location.href.replace(/^http:/, "https:");
+          function done() { if (btn) { btn.textContent = "Tersalin!"; setTimeout(function () { btn.textContent = "Salin link"; }, 2000); } }
+          if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(u).then(done).catch(function () { window.prompt("Salin link ini:", u); }); }
+          else { window.prompt("Salin link ini:", u); }
+        };
+      })();
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -40,6 +60,23 @@ const iconV = '3';
     <title>{title}</title>
   </head>
   <body class="min-h-screen bg-stone-50 text-stone-900">
+    <div id="inapp-banner" class="hidden bg-amber-100 border-b border-amber-300 px-4 py-2 text-sm text-amber-900 flex items-center gap-2">
+      <span class="flex-1">Untuk pengalaman & login terbaik, buka di browser (Chrome/Safari).</span>
+      <button type="button" id="inapp-open" class="hidden bg-amber-700 text-white rounded-lg px-2 py-1 text-xs font-semibold" onclick="window.__openExternal()">Buka</button>
+      <button type="button" class="bg-white border border-amber-300 rounded-lg px-2 py-1 text-xs" onclick="window.__copyLink(this)">Salin link</button>
+      <button type="button" class="text-amber-700 px-1 text-lg leading-none" onclick="this.parentElement.remove()">&times;</button>
+    </div>
     <slot />
+    <script is:inline>
+      // Soft banner on every page EXCEPT /login (which has its own hard interstitial)
+      (function () {
+        if (!window.__inAppBrowser) return;
+        if (location.pathname.replace(/\/$/, "") === "/login") return;
+        var b = document.getElementById("inapp-banner");
+        if (!b) return;
+        b.classList.remove("hidden");
+        if (window.__isAndroid) document.getElementById("inapp-open").classList.remove("hidden");
+      })();
+    </script>
   </body>
 </html>
