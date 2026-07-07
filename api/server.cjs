@@ -80,6 +80,8 @@ try { db.exec("ALTER TABLE users ADD COLUMN unsubscribe_token TEXT"); } catch(e)
 try { db.exec("ALTER TABLE users ADD COLUMN reg_class1 TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN reg_class2 TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN reg_class3 TEXT"); } catch(e) {}
+// Terms & Conditions acceptance — NULL means the user must still agree
+try { db.exec("ALTER TABLE users ADD COLUMN tos_accepted_at TEXT"); } catch(e) {}
 db.prepare("UPDATE users SET unsubscribe_token = lower(hex(randomblob(20))) WHERE unsubscribe_token IS NULL").run();
 
 // Gallery tables
@@ -416,9 +418,20 @@ app.post("/api/auth/complete-registration", authMiddleware, (req, res) => {
   }
 });
 
+// Record Terms & Conditions acceptance for the logged-in user
+app.post("/api/auth/accept-tos", authMiddleware, (req, res) => {
+  try {
+    db.prepare("UPDATE users SET tos_accepted_at = datetime('now') WHERE id = ? AND tos_accepted_at IS NULL").run(req.user.id);
+    res.json({ success: true });
+  } catch(e) {
+    console.error("accept-tos error:", e);
+    res.status(500).json({ error: "Failed to save" });
+  }
+});
+
 // Get current user
 app.get("/api/auth/me", authMiddleware, (req, res) => {
-  const user = db.prepare("SELECT id, email, name, alumni_id, role, status, created_at, notify_email, (password_hash IS NOT NULL) AS has_password FROM users WHERE id = ?").get(req.user.id);
+  const user = db.prepare("SELECT id, email, name, alumni_id, role, status, created_at, notify_email, (password_hash IS NOT NULL) AS has_password, (tos_accepted_at IS NOT NULL) AS tos_accepted FROM users WHERE id = ?").get(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
   let profile = null;
@@ -568,8 +581,7 @@ app.get("/api/profile/photos", authMiddleware, (req, res) => {
 
 // Delete a photo
 app.delete("/api/profile/photos/:id", approvedMiddleware, (req, res) => {
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
-  const photo = db.prepare("SELECT * FROM photos WHERE id = ? AND alumni_id = ?").get(req.params.id, user.alumni_id);
+  const photo = db.prepare("SELECT * FROM photos WHERE id = ?").get(req.params.id);
   if (!photo) return res.status(404).json({ error: "Photo not found" });
   try { fs.unlinkSync(require("path").join(__dirname, "..", "public", "photos", photo.filename)); } catch(e) {}
   db.prepare("DELETE FROM photos WHERE id = ?").run(req.params.id);
@@ -1150,7 +1162,7 @@ app.post("/api/admin/telegram-test", adminMiddleware, (req, res) => {
 
 // ── Gallery ─────────────────────────────────────────
 // GET /api/gallery/folders — list all folders with photo count + 4 random preview filenames
-app.get("/api/gallery/folders", (req, res) => {
+app.get("/api/gallery/folders", approvedMiddleware, (req, res) => {
   const folders = db.prepare("SELECT * FROM gallery_folders ORDER BY created_at ASC").all();
   const result = folders.map(f => {
     const count = db.prepare("SELECT COUNT(*) as c FROM gallery_photos WHERE folder_id=?").get(f.id).c;
@@ -1161,7 +1173,7 @@ app.get("/api/gallery/folders", (req, res) => {
 });
 
 // GET /api/gallery/folders/:id — list all photos in a folder
-app.get("/api/gallery/folders/:id", (req, res) => {
+app.get("/api/gallery/folders/:id", approvedMiddleware, (req, res) => {
   const folder = db.prepare("SELECT * FROM gallery_folders WHERE id=?").get(req.params.id);
   if (!folder) return res.status(404).json({ error: "Not found" });
   const photos = db.prepare("SELECT * FROM gallery_photos WHERE folder_id=? ORDER BY created_at ASC").all(req.params.id);
@@ -1211,8 +1223,8 @@ app.delete("/api/gallery/folders/:id", adminMiddleware, (req, res) => {
   res.json({ success: true });
 });
 
-// DELETE /api/gallery/photos/:id — delete single photo (admin only)
-app.delete("/api/gallery/photos/:id", adminMiddleware, (req, res) => {
+// DELETE /api/gallery/photos/:id — delete single photo (any approved user)
+app.delete("/api/gallery/photos/:id", approvedMiddleware, (req, res) => {
   const photo = db.prepare("SELECT * FROM gallery_photos WHERE id=?").get(req.params.id);
   if (!photo) return res.status(404).json({ error: "Not found" });
   try { fs.unlinkSync(path.join(__dirname, "..", "public", "photos", photo.filename)); } catch(e) {}

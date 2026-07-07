@@ -67,6 +67,20 @@ const iconV = '3';
       <button type="button" class="text-amber-700 px-1 text-lg leading-none" onclick="this.parentElement.remove()">&times;</button>
     </div>
     <slot />
+    <footer id="site-footer" class="text-center text-xs text-stone-400 py-6 px-4">
+      <a href="/terms" class="hover:text-amber-700 underline">Syarat &amp; Ketentuan</a>
+      <span class="mx-1">·</span>
+      7099 Alumni SMU 70 Angkatan 99
+    </footer>
+    <div id="tos-gate" class="hidden fixed inset-0 z-[110] bg-black/50 flex items-center justify-center px-4">
+      <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md text-center">
+        <h2 class="text-lg font-bold text-stone-800 mb-2">Syarat &amp; Ketentuan</h2>
+        <p class="text-sm text-stone-600 mb-5">Sebelum melanjutkan, mohon baca dan setujui Syarat &amp; Ketentuan penggunaan situs ini (termasuk data yang dikumpulkan dan penggunaan AI).</p>
+        <a href="/terms" class="block text-amber-700 underline text-sm mb-5">Baca Syarat &amp; Ketentuan lengkap</a>
+        <button type="button" id="tos-gate-agree" class="w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition mb-2">Saya Setuju</button>
+        <button type="button" id="tos-gate-logout" class="text-xs text-stone-400 underline">Keluar</button>
+      </div>
+    </div>
     <script is:inline>
       // Soft banner on every page EXCEPT /login (which has its own hard interstitial)
       (function () {
@@ -76,6 +90,37 @@ const iconV = '3';
         if (!b) return;
         b.classList.remove("hidden");
         if (window.__isAndroid) document.getElementById("inapp-open").classList.remove("hidden");
+      })();
+
+      // Avoid a double footer on pages that render their own <footer> (e.g. homepage)
+      (function () {
+        if (document.querySelectorAll("footer").length > 1) {
+          var f = document.getElementById("site-footer"); if (f) f.remove();
+        }
+      })();
+
+      // Terms & Conditions gate: any logged-in user who hasn't accepted must agree
+      // before using the site. Skipped on pages where the user needs to act first.
+      (function () {
+        var path = location.pathname.replace(/\/$/, "");
+        if (path === "/login" || path === "/terms" || path === "/reset") return;
+        fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) {
+            if (!d || !d.user || d.user.tos_accepted) return;
+            var gate = document.getElementById("tos-gate");
+            gate.classList.remove("hidden");
+            document.getElementById("tos-gate-agree").onclick = function () {
+              var btn = this; btn.disabled = true; btn.textContent = "Menyimpan...";
+              fetch("/api/auth/accept-tos", { method: "POST", credentials: "include" })
+                .then(function () { gate.classList.add("hidden"); })
+                .catch(function () { btn.disabled = false; btn.textContent = "Saya Setuju"; });
+            };
+            document.getElementById("tos-gate-logout").onclick = function () {
+              fetch("/api/auth/logout", { method: "POST", credentials: "include" }).then(function () { location.href = "/login"; });
+            };
+          })
+          .catch(function () {});
       })();
     </script>
   </body>
