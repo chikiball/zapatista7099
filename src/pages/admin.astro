@@ -195,9 +195,11 @@ import Layout from "../layouts/Layout.astro";
       document.getElementById('pending-empty').classList.add('hidden');
       document.getElementById('pending-list').innerHTML=list.map(function(u){
         var match=u.alumni_name?'<div class="text-xs text-green-700 mt-1">Matched: '+u.alumni_name+(u.alumni_nick?' ('+u.alumni_nick+')':'')+' - '+u.alumni_city+'</div>':'<div class="text-xs text-stone-400 mt-1">No alumni match</div>';
+        var regKelas=[u.reg_class1,u.reg_class2,u.reg_class3].filter(Boolean).join(' / ');
+        var kelasLine=regKelas?'<div class="text-xs text-amber-800 mt-1">📚 Kelas: <b>'+regKelas+'</b></div>':'';
         var method=u.google_id?'Google':'Email';
         var ago=timeAgo(u.created_at);
-        return '<div class="bg-white rounded-xl p-4 shadow-sm mb-3"><div class="flex items-start justify-between"><div><div class="font-medium text-stone-800">'+(u.name||u.email)+'</div><div class="text-xs text-stone-500">'+u.email+' | '+method+' | '+ago+'</div>'+match+'</div><div class="flex gap-2"><button type="button" onclick="approveUser('+u.id+')" class="bg-green-600 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-700">✅ Approve</button>'+(u.alumni_id?'<button type="button" onclick="unlinkUser('+u.id+')" class="bg-amber-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-amber-600">🔗 Unlink</button>':'')+'<button type="button" onclick="rejectUser('+u.id+')" class="bg-red-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-red-600">❌ Reject</button></div></div></div>';
+        return '<div class="bg-white rounded-xl p-4 shadow-sm mb-3"><div class="flex items-start justify-between"><div><div class="font-medium text-stone-800">'+(u.name||u.email)+'</div><div class="text-xs text-stone-500">'+u.email+' | '+method+' | '+ago+'</div>'+kelasLine+match+'</div><div class="flex gap-2"><button type="button" onclick="approveUser('+u.id+')" class="bg-green-600 text-white px-3 py-1 rounded-lg text-xs hover:bg-green-700">✅ Approve</button>'+(u.alumni_id?'<button type="button" onclick="unlinkUser('+u.id+')" class="bg-amber-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-amber-600">🔗 Unlink</button>':'')+'<button type="button" onclick="rejectUser('+u.id+')" class="bg-red-500 text-white px-3 py-1 rounded-lg text-xs hover:bg-red-600">❌ Reject</button></div></div></div>';
       }).join('');
     });
   }
@@ -226,7 +228,7 @@ import Layout from "../layouts/Layout.astro";
     var a=alumniData.find(function(x){return x.id===id});if(!a)return;
     editId=id;
     document.getElementById('modal-title').textContent='Edit: '+a.name;
-    var fields=['name','nickname','email','phone','city','country','job_title','company','class','university','hobby','birthday','gender','address','latitude','longitude'];
+    var fields=['name','nickname','email','phone','city','country','job_title','company','class','class1','class2','university','hobby','birthday','gender','address','latitude','longitude'];
     document.getElementById('edit-fields').innerHTML=fields.map(function(f){
       return '<div><label class="block text-xs text-stone-500 mb-1">'+f+'</label><input name="'+f+'" value="'+(a[f]||'')+'" class="w-full border rounded px-2 py-1 text-sm"></div>';
     }).join('');
@@ -235,7 +237,7 @@ import Layout from "../layouts/Layout.astro";
   function closeModal(){document.getElementById('modal').classList.add('hidden')}
   function saveEdit(e){
     e.preventDefault();var f=e.target;var body={};
-    ['name','nickname','email','phone','city','country','job_title','company','class','university','hobby','birthday','gender','address','latitude','longitude'].forEach(function(k){body[k]=f[k].value});
+    ['name','nickname','email','phone','city','country','job_title','company','class','class1','class2','university','hobby','birthday','gender','address','latitude','longitude'].forEach(function(k){body[k]=f[k].value});
     fetch('/api/admin/alumni/'+editId,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)}).then(function(){closeModal();loadAlumni()});
   }
   function delAlumni(id){if(!confirm('Delete this alumni?'))return;fetch('/api/admin/alumni/'+id,{method:'DELETE',credentials:'include'}).then(function(){loadAlumni()})}

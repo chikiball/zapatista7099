@@ -30,6 +30,14 @@ import Layout from "../layouts/Layout.astro";
             <label class="block text-sm font-medium text-stone-700 mb-1">Nama Lengkap</label>
             <input type="text" id="name" placeholder="Nama kamu" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
           </div>
+          <div id="kelas-field" class="hidden mb-4">
+            <label class="block text-sm font-medium text-stone-700 mb-1">Kelas <span class="text-stone-400 font-normal">(isi minimal salah satu)</span></label>
+            <div class="grid grid-cols-3 gap-2">
+              <select id="reg-class1" class="w-full border border-stone-300 rounded-xl px-2 py-3 text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"><option value="">Kelas 1</option><option value="1-1">1-1</option><option value="1-2">1-2</option><option value="1-3">1-3</option><option value="1-4">1-4</option><option value="1-5">1-5</option><option value="1-6">1-6</option><option value="1-7">1-7</option><option value="1-8">1-8</option><option value="1-9">1-9</option><option value="1-10">1-10</option><option value="1-11">1-11</option><option value="1-12">1-12</option><option value="Lainnya">Lainnya</option></select>
+              <select id="reg-class2" class="w-full border border-stone-300 rounded-xl px-2 py-3 text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"><option value="">Kelas 2</option><option value="2-A">2-A</option><option value="2-B">2-B</option><option value="2-C">2-C</option><option value="2-D">2-D</option><option value="2-E">2-E</option><option value="2-F">2-F</option><option value="2-G">2-G</option><option value="2-H">2-H</option><option value="2-I">2-I</option><option value="2-J">2-J</option><option value="2-K">2-K</option><option value="2-L">2-L</option><option value="Lainnya">Lainnya</option></select>
+              <select id="reg-class3" class="w-full border border-stone-300 rounded-xl px-2 py-3 text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"><option value="">Kelas 3</option><option value="IPA 1">IPA 1</option><option value="IPA 2">IPA 2</option><option value="IPA 3">IPA 3</option><option value="IPA 4">IPA 4</option><option value="IPA 5">IPA 5</option><option value="IPA 6">IPA 6</option><option value="IPA 7">IPA 7</option><option value="IPA 8">IPA 8</option><option value="IPS 1">IPS 1</option><option value="IPS 2">IPS 2</option><option value="IPS 3">IPS 3</option><option value="IPS 4">IPS 4</option><option value="Lainnya">Lainnya</option></select>
+            </div>
+          </div>
           <div class="mb-4">
             <label class="block text-sm font-medium text-stone-700 mb-1">Email</label>
             <input type="email" id="email" required placeholder="email@contoh.com" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
@@ -58,11 +66,10 @@ import Layout from "../layouts/Layout.astro";
     let isSignup = false;
 
     // After auth: complete profiles go to the homepage, incomplete ones to /profile.
-    function redirectAfterAuth() {
-      fetch("/api/auth/me", { credentials: "include" })
-        .then(function(r) { return r.ok ? r.json() : null; })
-        .then(function(d) { window.location.href = (d && d.profile_complete) ? "/" : "/profile"; })
-        .catch(function() { window.location.href = "/profile"; });
+    // Use a full page navigation (NOT a second fetch) — Safari private mode won't send
+    // a just-set cookie on an immediate follow-up fetch, but it does on navigation.
+    function goAfterAuth(complete) {
+      window.location.href = complete ? "/" : "/profile";
     }
 
     // Wait for Google SDK to load, then render the button
@@ -94,6 +101,7 @@ import Layout from "../layouts/Layout.astro";
       isSignup = !isSignup;
       document.getElementById("form-title").textContent = isSignup ? "Daftar Akun Baru" : "Masuk";
       document.getElementById("name-field").classList.toggle("hidden", !isSignup);
+      document.getElementById("kelas-field").classList.toggle("hidden", !isSignup);
       document.getElementById("submit-btn").textContent = isSignup ? "Daftar" : "Masuk";
       document.getElementById("toggle-text").textContent = isSignup ? "Sudah punya akun?" : "Belum punya akun?";
       document.getElementById("toggle-btn").textContent = isSignup ? "Masuk" : "Daftar";
@@ -121,6 +129,13 @@ import Layout from "../layouts/Layout.astro";
       const email = document.getElementById("email").value;
       const password = document.getElementById("password").value;
       const name = document.getElementById("name").value;
+      const class1 = document.getElementById("reg-class1").value;
+      const class2 = document.getElementById("reg-class2").value;
+      const class3 = document.getElementById("reg-class3").value;
+      if (isSignup) {
+        if (!name.trim()) { showError("Nama lengkap wajib diisi"); return; }
+        if (!class1 && !class2 && !class3) { showError("Isi minimal salah satu Kelas (1, 2, atau 3)"); return; }
+      }
       const url = isSignup ? "/api/auth/signup" : "/api/auth/login";
 
       try {
@@ -128,7 +143,7 @@ import Layout from "../layouts/Layout.astro";
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ email, password, name: isSignup ? name : undefined }),
+          body: JSON.stringify(isSignup ? { email, password, name, class1, class2, class3 } : { email, password }),
         });
         const data = await res.json();
         if (!res.ok) { showError(data.error); return; }
@@ -138,7 +153,7 @@ import Layout from "../layouts/Layout.astro";
         } else {
           showSuccess("Berhasil! Redirecting...");
         }
-        setTimeout(function() { redirectAfterAuth(); }, 1000);
+        setTimeout(function() { goAfterAuth(data.profile_complete); }, 800);
       } catch(err) {
         showError("Terjadi kesalahan. Coba lagi.");
       }
@@ -161,7 +176,7 @@ import Layout from "../layouts/Layout.astro";
         } else {
           showSuccess("Login Google berhasil! Redirecting...");
         }
-        setTimeout(function() { redirectAfterAuth(); }, 1000);
+        setTimeout(function() { goAfterAuth(data.profile_complete); }, 800);
       } catch(err) {
         showError("Google login gagal. Coba lagi.");
       }
@@ -179,8 +194,9 @@ import Layout from "../layouts/Layout.astro";
     }
 
     // Already logged in? Route based on profile completeness.
-    fetch("/api/auth/me", { credentials: "include" })
-      .then(function(r) { if (r.ok) redirectAfterAuth(); })
+    fetch("/api/auth/me", { credentials: "include", cache: "no-store" })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { if (d) goAfterAuth(d.profile_complete); })
       .catch(function() {});
   </script>
 </Layout>

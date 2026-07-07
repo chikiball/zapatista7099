@@ -39,12 +39,18 @@ db.exec(`
 
 // Add google_id column to alumni if not exists
 try { db.exec("ALTER TABLE alumni ADD COLUMN google_id TEXT"); } catch(e) { /* column exists */ }
+// Kelas 1 (1-1..1-12) and Kelas 2 (2-A..2-L) — editable in profile
+try { db.exec("ALTER TABLE alumni ADD COLUMN class1 TEXT"); } catch(e) { /* column exists */ }
+try { db.exec("ALTER TABLE alumni ADD COLUMN class2 TEXT"); } catch(e) { /* column exists */ }
 
 // ── App Setup ───────────────────────────────────────
 const app = express();
+app.disable("etag"); // never let auth/session responses be conditionally cached (304)
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+// Auth responses must never be cached — a stale 401 causes "logged out" bounces
+app.use("/api/auth", (req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 
 // Photo upload config
 const storage = multer.diskStorage({
@@ -70,6 +76,10 @@ try { db.exec("ALTER TABLE events ADD COLUMN created_by INTEGER REFERENCES users
 try { db.exec("ALTER TABLE events ADD COLUMN cover_image TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN notify_email INTEGER DEFAULT 1"); } catch(e) {}
 try { db.exec("ALTER TABLE users ADD COLUMN unsubscribe_token TEXT"); } catch(e) {}
+// Class captured at signup (helps admin identify the person before linking)
+try { db.exec("ALTER TABLE users ADD COLUMN reg_class1 TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN reg_class2 TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN reg_class3 TEXT"); } catch(e) {}
 db.prepare("UPDATE users SET unsubscribe_token = lower(hex(randomblob(20))) WHERE unsubscribe_token IS NULL").run();
 
 // Gallery tables
@@ -191,6 +201,15 @@ function setTokenCookie(res, token) {
   });
 }
 
+// Is the linked alumni profile complete? (same required fields as /api/auth/me)
+function isProfileComplete(user) {
+  if (!user || !user.alumni_id) return false;
+  const p = db.prepare("SELECT name, city, country, job_title, class FROM alumni WHERE id = ?").get(user.alumni_id);
+  if (!p) return false;
+  const filled = (v) => v !== null && v !== undefined && String(v).trim() !== "";
+  return ["name", "city", "country", "job_title", "class"].every((k) => filled(p[k]));
+}
+
 
 function approvedMiddleware(req, res, next) {
   const token = req.cookies.token || (req.headers.authorization || "").replace("Bearer ", "");
@@ -242,9 +261,12 @@ function findAlumniMatch(email, name) {
 // Sign up with email/password
 app.post("/api/auth/signup", (req, res) => {
   try {
-    const { email, password, name } = req.body;
+    const { email, password, name, class1, class2, class3 } = req.body;
     if (!email || !password) return res.status(400).json({ error: "Email and password required" });
     if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (!name || !name.trim()) return res.status(400).json({ error: "Nama lengkap wajib diisi" });
+    const c1 = (class1 || "").trim(), c2 = (class2 || "").trim(), c3 = (class3 || "").trim();
+    if (!c1 && !c2 && !c3) return res.status(400).json({ error: "Isi minimal salah satu Kelas (1, 2, atau 3)" });
 
     // Check if user exists
     const existing = db.prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?)").get(email);
@@ -255,19 +277,21 @@ app.post("/api/auth/signup", (req, res) => {
     const password_hash = bcrypt.hashSync(password, 10);
 
     const result = db.prepare(
-      "INSERT INTO users (email, password_hash, name, alumni_id, status) VALUES (?, ?, ?, ?, 'pending')"
-    ).run(email.toLowerCase(), password_hash, name || null, match ? match.id : null);
+      "INSERT INTO users (email, password_hash, name, alumni_id, status, reg_class1, reg_class2, reg_class3) VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)"
+    ).run(email.toLowerCase(), password_hash, name.trim(), match ? match.id : null, c1 || null, c2 || null, c3 || null);
 
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(result.lastInsertRowid);
     const token = generateToken(user);
     setTokenCookie(res, token);
 
+    const kelasStr = [c1, c2, c3].filter(Boolean).join(" / ");
     sendEmail(email, "Pendaftaran Berhasil - Alumni 7099",
       emailTemplate("Pendaftaran Berhasil! 🎉",
         "Halo " + (name || "Alumni") + ",<br><br>Akun kamu berhasil dibuat. Saat ini akun kamu sedang <b>menunggu persetujuan admin</b>.<br><br>Kamu akan menerima email lagi ketika akun kamu sudah disetujui.",
         "Kunjungi Website", "https://zapa.inweb.id"));
     sendTelegram("🆕 <b>Pendaftaran Baru!</b>\n" +
       "Nama: " + (name || "-") + "\n" +
+      "Kelas: " + (kelasStr || "-") + "\n" +
       "Email: " + email + "\n" +
       "Metode: Email/Password\n" +
       (match ? "✅ Matched: " + match.name + " (" + (match.nickname||"") + ")\n" : "❌ No alumni match\n") +
@@ -301,6 +325,7 @@ app.post("/api/auth/login", (req, res) => {
     res.json({
       success: true,
       user: { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id },
+      profile_complete: isProfileComplete(user),
     });
   } catch(e) {
     console.error("Login error:", e);
@@ -360,6 +385,7 @@ app.post("/api/auth/google", async (req, res) => {
     res.json({
       success: true,
       user: { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id },
+      profile_complete: isProfileComplete(user),
       alumni_match: alumniMatch ? { id: alumniMatch.id, name: alumniMatch.name, nickname: alumniMatch.nickname } : null,
     });
   } catch(e) {
@@ -428,15 +454,15 @@ app.get("/api/unsubscribe", (req, res) => {
 // Update or create profile
 app.put("/api/profile", approvedMiddleware, async (req, res) => {
   try {
-    const { name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, class: kelas } = req.body;
+    const { name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, class: kelas, class1, class2 } = req.body;
     const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
 
     if (user.alumni_id) {
       const existing = db.prepare("SELECT city, latitude FROM alumni WHERE id = ?").get(user.alumni_id);
       db.prepare(`
-        UPDATE alumni SET name=?, nickname=?, phone=?, city=?, country=?, job_title=?, company=?, bio=?, birthday=?, gender=?, address=?, hobby=?, university=?, class=?
+        UPDATE alumni SET name=?, nickname=?, phone=?, city=?, country=?, job_title=?, company=?, bio=?, birthday=?, gender=?, address=?, hobby=?, university=?, class=?, class1=?, class2=?
         WHERE id=?
-      `).run(name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas, user.alumni_id);
+      `).run(name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas, class1, class2, user.alumni_id);
       if (city && (!existing.latitude || existing.city !== city)) {
         geocodeCity(city, country).then(c => {
           if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, user.alumni_id);
@@ -444,9 +470,9 @@ app.put("/api/profile", approvedMiddleware, async (req, res) => {
       }
     } else {
       const result = db.prepare(`
-        INSERT INTO alumni (name, nickname, email, phone, city, country, job_title, company, bio, is_public, birthday, gender, address, hobby, university, class)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
-      `).run(name, nickname, user.email, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas);
+        INSERT INTO alumni (name, nickname, email, phone, city, country, job_title, company, bio, is_public, birthday, gender, address, hobby, university, class, class1, class2)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(name, nickname, user.email, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas, class1, class2);
       db.prepare("UPDATE users SET alumni_id = ?, name = ? WHERE id = ?").run(result.lastInsertRowid, name, user.id);
       if (city) {
         const newId = result.lastInsertRowid;
@@ -881,7 +907,7 @@ app.get("/api/admin/dashboard", adminMiddleware, (req, res) => {
 });
 
 app.get("/api/admin/pending", adminMiddleware, (req, res) => {
-  const users = db.prepare("SELECT u.id, u.email, u.name, u.google_id, u.alumni_id, u.status, u.created_at, a.name as alumni_name, a.nickname as alumni_nick, a.city as alumni_city FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id WHERE u.status = 'pending' ORDER BY u.created_at DESC").all();
+  const users = db.prepare("SELECT u.id, u.email, u.name, u.google_id, u.alumni_id, u.status, u.created_at, u.reg_class1, u.reg_class2, u.reg_class3, a.name as alumni_name, a.nickname as alumni_nick, a.city as alumni_city FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id WHERE u.status = 'pending' ORDER BY u.created_at DESC").all();
   res.json(users);
 });
 
@@ -1022,9 +1048,9 @@ app.get("/api/admin/alumni", adminMiddleware, (req, res) => {
 });
 
 app.put("/api/admin/alumni/:id", adminMiddleware, (req, res) => {
-  const { name, nickname, email, phone, city, country, job_title, company, class: kelas, university, hobby, birthday, gender, address, latitude, longitude } = req.body;
-  db.prepare("UPDATE alumni SET name=?, nickname=?, email=?, phone=?, city=?, country=?, job_title=?, company=?, class=?, university=?, hobby=?, birthday=?, gender=?, address=?, latitude=?, longitude=? WHERE id=?")
-    .run(name, nickname, email, phone, city, country, job_title, company, kelas, university, hobby, birthday, gender, address, latitude, longitude, req.params.id);
+  const { name, nickname, email, phone, city, country, job_title, company, class: kelas, class1, class2, university, hobby, birthday, gender, address, latitude, longitude } = req.body;
+  db.prepare("UPDATE alumni SET name=?, nickname=?, email=?, phone=?, city=?, country=?, job_title=?, company=?, class=?, class1=?, class2=?, university=?, hobby=?, birthday=?, gender=?, address=?, latitude=?, longitude=? WHERE id=?")
+    .run(name, nickname, email, phone, city, country, job_title, company, kelas, class1, class2, university, hobby, birthday, gender, address, latitude, longitude, req.params.id);
   res.json({ success: true });
 });
 
