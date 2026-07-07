@@ -14,6 +14,14 @@ const iconV = '3';
 <!doctype html>
 <html lang="en">
   <head>
+    <script is:inline>
+      // Force HTTPS. TLS terminates upstream; browsers that don't auto-upgrade
+      // (e.g. Chrome incognito, no HSTS) would otherwise load over HTTP and the
+      // Secure session cookie gets dropped -> login bounces. Redirect once.
+      if (location.protocol === "http:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+        location.replace("https://" + location.host + location.pathname + location.search + location.hash);
+      }
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="7099 - Alumni SMAN 70 Jakarta Angkatan 99" />
