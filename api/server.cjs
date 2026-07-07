@@ -677,11 +677,15 @@ app.get("/api/map", (req, res) => {
 app.get("/api/stats/detail", (req, res) => {
   const all = db.prepare("SELECT * FROM alumni WHERE is_public = 1").all();
   
-  // Class distribution
+  // Class distribution — REGISTERED users only (roster import adds many
+  // non-registered alumni, which would otherwise skew IPA/IPS + Kelas Paling Rame)
+  const regAlumniIds = new Set(
+    db.prepare("SELECT alumni_id FROM users WHERE alumni_id IS NOT NULL").all().map(r => r.alumni_id)
+  );
   const classes = {};
   let ipaTotal=0, ipsTotal=0;
   all.forEach(a => {
-    if(a.class){classes[a.class]=(classes[a.class]||0)+1;if(a.class.startsWith("IPA"))ipaTotal++;else if(a.class.startsWith("IPS"))ipsTotal++;}
+    if(a.class && regAlumniIds.has(a.id)){classes[a.class]=(classes[a.class]||0)+1;if(a.class.startsWith("IPA"))ipaTotal++;else if(a.class.startsWith("IPS"))ipsTotal++;}
   });
 
   // Cities
