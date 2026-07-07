@@ -21,13 +21,14 @@
 | Statistics / Charts (class stats = registered users only) | ✅ | `/stats` |
 | Articles (cover + inline images/videos, lightbox) | ✅ | `/articles` |
 | Events (RSVP, images, .ics calendar, maps link) | ✅ | `/events` |
-| Gallery (folders, 6 view modes, admin layout control) | ✅ | `/gallery` |
+| Gallery (folders, 6 view modes, approved-only view, any-user photo delete) | ✅ | `/gallery` |
 | Forum (categories, threads, replies, reactions, @mentions) | ✅ | `/forum` |
 | Du-Du Wall (dari-untuk notes, mading-style, @autocomplete) | ✅ | `/dudu` |
 | Admin Panel (approval queue, alumni/user mgmt, settings) | ✅ | `/admin` |
 | Email Notifications (articles, events, forum, du-du mentions) | ✅ | — |
 | Auto-Geocoding (city → lat/lng via Nominatim) | ✅ | — |
 | PWA (installable, custom icon, app name) | ✅ | — |
+| Terms & Conditions (blocking gate — all users must agree) | ✅ | `/terms` |
 
 ## Tech Stack
 

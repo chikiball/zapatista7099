@@ -53,7 +53,7 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - `npm run build` → `dist/`; `npm run preview` serves the build. There are **no tests or linters** configured.
 - `scripts/` has its own `package.json` (CommonJS) — `cd scripts && npm install` before running the one-time importers.
 
-## Pages (13)
+## Pages (14)
 
 | Page | URL | Auth |
 |------|-----|------|
@@ -66,10 +66,11 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 | Directory | `/directory` | Approved |
 | Articles | `/articles` | Public (write: approved) |
 | Events | `/events` | Public (create/RSVP: approved) |
-| Gallery | `/gallery` | Public (upload: approved, layout/delete: admin) |
+| Gallery | `/gallery` | **Approved only** (view); upload/photo-delete: approved; folder create/delete/layout: admin |
 | Forum | `/forum` | Public (post: approved, mod: admin) |
 | Du-Du Wall | `/dudu` | Public (post: approved, delete: owner/admin) |
 | Admin | `/admin` | Admin only |
+| Terms & Conditions | `/terms` | Public |
 
 ## Key Systems
 
@@ -92,7 +93,8 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - **Stats:** 12 sections with scroll animations, normalized jobs/industries/universities. **IPA vs IPS** and **Kelas Paling Rame** count **registered users only** (alumni linked to a `users` row) — the roster import added ~285 non-registered alumni that would otherwise skew class stats; all other stats use the full public roster. All count endpoints (`/api/stats`, `/api/stats/detail`, map, directory) filter `is_public = 1` so every page shows the same alumni total (see the is_public note below).
 - **Articles:** Magazine layout, masonry photo gallery, lightbox with swipe, inline image/video upload (sharp resize), auto-link URLs, `[foto:]` and `[video:]` tag system. 95 Instagram posts imported as articles under author "Zapatista7099_Insta".
 - **Events:** RSVP toggle, cover + inline images, `[foto:]` tag system, lightbox. Any approved user can create; only admin can delete; creator/admin can edit. Date tapping downloads `.ics`. Location links to Google Maps.
-- **Gallery:** Folder-based photo gallery. 6 display modes: Polaroid, Magazine Editorial, Filmstrip, Feed, Slideshow, Yearbook. Layout stored per folder (admin sets it). Upload: any approved user. Delete: admin only. Seeded: "Yearbook" (239 portraits) + "Instagram Archive" (129 photos).
+- **Gallery:** Folder-based photo gallery. **View is approved-users-only** (`/api/gallery/folders*` require `approvedMiddleware`; the page shows a login gate otherwise). 6 display modes: Polaroid, Magazine Editorial, Filmstrip, Feed, Slideshow, Yearbook. Layout stored per folder (admin sets it). Upload: any approved user. **Photo delete: any approved user** (no ownership check — `canDelPhoto` in gallery.astro; `DELETE /api/gallery/photos/:id` + `DELETE /api/profile/photos/:id` are `approvedMiddleware`). Folder create/delete: admin. Seeded: "Yearbook" (239 portraits) + "Instagram Archive" (129 photos).
+- **Terms & Conditions (`/terms`):** full T&C (data collected, third parties, **AI use**, conduct, data rights). `users.tos_accepted_at` (NULL = must agree). `POST /api/auth/accept-tos` records it; `/api/auth/me` returns `tos_accepted`. `Layout.astro` shows a **blocking gate** to any logged-in user who hasn't accepted, on every page except `/login`/`/terms`/`/reset` — so all existing users must agree on next visit. Footer link on every page (site-wide footer in `Layout.astro`; deduped when a page has its own `<footer>`).
 - **Forum:** Category-based discussion board. 5 categories + 2 sticky how-to posts pre-seeded. Threads + replies + 5 emoji reactions. `@mention` notifications (email to mentioned alumni). Reply notifications (email to thread author). Admin: pin/lock/delete threads and replies.
 - **Du-Du Wall:** Nostalgic "dari-untuk" (from-to) messaging wall à la 1999 school mading. Short notes (60/60/280 char) with 3 fixed fields: Dari, Untuk, Pesan. 7 rotating pastel colors, rotated notes, Caveat handwritten font. `@nickname` autocomplete dropdown on Untuk + Pesan (keyboard nav + click). Email notifications to `@mentioned` alumni. 5 emoji reactions. Shuffle button. JS masonry (flex columns with shortest-column placement) for clean wrapping at any viewport. Delete: owner + admin.
 - **Photos:** Symlink dist/photos → public/photos (survives builds), sharp auto-resize max 800px
