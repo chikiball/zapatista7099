@@ -15,6 +15,22 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </div>
   <div class="min-h-screen flex items-center justify-center px-4 py-12">
+    <div id="reg-complete-modal" class="hidden fixed inset-0 z-[90] bg-black/40 flex items-center justify-center px-4">
+      <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm">
+        <h2 class="text-lg font-bold text-stone-800 mb-1">Lengkapi data kamu</h2>
+        <p class="text-xs text-stone-500 mb-4">Supaya admin bisa mengenali kamu.</p>
+        <div id="reg-complete-err" class="hidden bg-red-50 text-red-700 text-sm p-2 rounded-lg mb-3"></div>
+        <label class="block text-sm font-medium text-stone-700 mb-1">Nama Lengkap</label>
+        <input type="text" id="rc-name" class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm mb-3 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
+        <label class="block text-sm font-medium text-stone-700 mb-1">Kelas <span class="text-stone-400 font-normal">(isi minimal salah satu)</span></label>
+        <div class="grid grid-cols-3 gap-2">
+          <select id="rc-class1" class="w-full border border-stone-300 rounded-xl px-2 py-3 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none"><option value="">Kelas 1</option><option value="1-1">1-1</option><option value="1-2">1-2</option><option value="1-3">1-3</option><option value="1-4">1-4</option><option value="1-5">1-5</option><option value="1-6">1-6</option><option value="1-7">1-7</option><option value="1-8">1-8</option><option value="1-9">1-9</option><option value="1-10">1-10</option><option value="1-11">1-11</option><option value="1-12">1-12</option><option value="Lainnya">Lainnya</option></select>
+          <select id="rc-class2" class="w-full border border-stone-300 rounded-xl px-2 py-3 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none"><option value="">Kelas 2</option><option value="2-A">2-A</option><option value="2-B">2-B</option><option value="2-C">2-C</option><option value="2-D">2-D</option><option value="2-E">2-E</option><option value="2-F">2-F</option><option value="2-G">2-G</option><option value="2-H">2-H</option><option value="2-I">2-I</option><option value="2-J">2-J</option><option value="2-K">2-K</option><option value="2-L">2-L</option><option value="Lainnya">Lainnya</option></select>
+          <select id="rc-class3" class="w-full border border-stone-300 rounded-xl px-2 py-3 text-sm bg-white focus:ring-2 focus:ring-amber-500 outline-none"><option value="">Kelas 3</option><option value="IPA 1">IPA 1</option><option value="IPA 2">IPA 2</option><option value="IPA 3">IPA 3</option><option value="IPA 4">IPA 4</option><option value="IPA 5">IPA 5</option><option value="IPA 6">IPA 6</option><option value="IPA 7">IPA 7</option><option value="IPA 8">IPA 8</option><option value="IPS 1">IPS 1</option><option value="IPS 2">IPS 2</option><option value="IPS 3">IPS 3</option><option value="IPS 4">IPS 4</option><option value="Lainnya">Lainnya</option></select>
+        </div>
+        <button type="button" id="rc-submit" class="mt-5 w-full bg-amber-800 text-white rounded-xl px-4 py-3 font-semibold hover:bg-amber-900 transition">Simpan &amp; Lanjut</button>
+      </div>
+    </div>
     <div class="w-full max-w-md">
       <div class="text-center mb-8">
         <a href="/" class="flex justify-center"><img src="/logo-hero.png" alt="7099" style="height:60px;width:auto"></a>
@@ -195,6 +211,9 @@ import Layout from "../layouts/Layout.astro";
         const data = await res.json();
         if (!res.ok) { showError(data.error); return; }
 
+        // New Google user with no name/kelas yet -> require completion before continuing.
+        if (data.needs_reg_info) { openRegComplete(data.token, data.user && data.user.name); return; }
+
         if (data.alumni_match) {
           showSuccess("Data ditemukan: " + data.alumni_match.name + ". Redirecting...");
         } else {
@@ -204,6 +223,34 @@ import Layout from "../layouts/Layout.astro";
       } catch(err) {
         showError("Google login gagal. Coba lagi.");
       }
+    }
+
+    // Required post-Google modal: collect name + >=1 Kelas, then continue to /profile.
+    function openRegComplete(token, prefillName) {
+      hideMessages();
+      if (prefillName) document.getElementById("rc-name").value = prefillName;
+      document.getElementById("reg-complete-modal").classList.remove("hidden");
+      document.getElementById("rc-submit").onclick = async function () {
+        var err = document.getElementById("reg-complete-err");
+        err.classList.add("hidden");
+        var name = document.getElementById("rc-name").value.trim();
+        var c1 = document.getElementById("rc-class1").value;
+        var c2 = document.getElementById("rc-class2").value;
+        var c3 = document.getElementById("rc-class3").value;
+        if (!name) { err.textContent = "Nama lengkap wajib diisi"; err.classList.remove("hidden"); return; }
+        if (!c1 && !c2 && !c3) { err.textContent = "Isi minimal salah satu Kelas (1, 2, atau 3)"; err.classList.remove("hidden"); return; }
+        try {
+          var r = await fetch("/api/auth/complete-registration", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+            credentials: "include",
+            body: JSON.stringify({ name: name, class1: c1, class2: c2, class3: c3 }),
+          });
+          var d = await r.json();
+          if (!r.ok) { err.textContent = d.error || "Gagal menyimpan"; err.classList.remove("hidden"); return; }
+          goAfterAuth(false); // new user -> profile is incomplete -> /profile
+        } catch (e) { err.textContent = "Terjadi kesalahan. Coba lagi."; err.classList.remove("hidden"); }
+      };
     }
 
     

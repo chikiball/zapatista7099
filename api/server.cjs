@@ -386,11 +386,30 @@ app.post("/api/auth/google", async (req, res) => {
       success: true,
       user: { id: user.id, email: user.email, name: user.name, alumni_id: user.alumni_id },
       profile_complete: isProfileComplete(user),
+      token, // returned so the post-Google completion call can use Bearer (Safari private-mode safe)
+      needs_reg_info: !user.alumni_id && !(user.reg_class1 || user.reg_class2 || user.reg_class3),
       alumni_match: alumniMatch ? { id: alumniMatch.id, name: alumniMatch.name, nickname: alumniMatch.nickname } : null,
     });
   } catch(e) {
     console.error("Google auth error:", e);
     res.status(500).json({ error: "Google authentication failed" });
+  }
+});
+
+// Post-Google completion: capture full name + >=1 Kelas for a new Google user
+// (Google Sign-In has no form, so this collects what email/password signup requires).
+app.post("/api/auth/complete-registration", authMiddleware, (req, res) => {
+  try {
+    const { name, class1, class2, class3 } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: "Nama lengkap wajib diisi" });
+    const c1 = (class1 || "").trim(), c2 = (class2 || "").trim(), c3 = (class3 || "").trim();
+    if (!c1 && !c2 && !c3) return res.status(400).json({ error: "Isi minimal salah satu Kelas (1, 2, atau 3)" });
+    db.prepare("UPDATE users SET name = ?, reg_class1 = ?, reg_class2 = ?, reg_class3 = ? WHERE id = ?")
+      .run(name.trim(), c1 || null, c2 || null, c3 || null, req.user.id);
+    res.json({ success: true });
+  } catch(e) {
+    console.error("complete-registration error:", e);
+    res.status(500).json({ error: "Failed to save" });
   }
 });
 
@@ -1069,7 +1088,7 @@ app.post("/api/admin/unlink/:id", adminMiddleware, (req, res) => {
 });
 
 app.get("/api/admin/users", adminMiddleware, (req, res) => {
-  res.json(db.prepare("SELECT u.id, u.email, u.name, u.role, u.status, u.alumni_id, u.google_id, u.created_at, a.name as alumni_name FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id ORDER BY u.created_at DESC").all());
+  res.json(db.prepare("SELECT u.id, u.email, u.name, u.role, u.status, u.alumni_id, u.google_id, (u.password_hash IS NOT NULL) AS has_password, u.created_at, a.name as alumni_name FROM users u LEFT JOIN alumni a ON u.alumni_id = a.id ORDER BY u.created_at DESC").all());
 });
 
 app.put("/api/admin/users/:id", adminMiddleware, (req, res) => {
