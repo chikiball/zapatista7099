@@ -64,8 +64,9 @@ import Layout from "../layouts/Layout.astro";
       fetch('/api/map').then(function(r){return r.json()}).then(function(al){
         var feats=[];
         al.forEach(function(d){
-          if(d.latitude==null||d.longitude==null)return;
-          feats.push({type:'Feature',geometry:{type:'Point',coordinates:[d.longitude,d.latitude]},
+          var lat=parseFloat(d.latitude),lng=parseFloat(d.longitude);
+          if(!isFinite(lat)||!isFinite(lng)||(lat===0&&lng===0))return;
+          feats.push({type:'Feature',geometry:{type:'Point',coordinates:[lng,lat]},
             properties:{name:d.name||'',nickname:d.nickname||'',job_title:d.job_title||''}});
         });
         document.getElementById('cnt').textContent=feats.length+' alumni';

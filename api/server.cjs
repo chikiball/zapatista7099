@@ -151,17 +151,40 @@ function sendNewsletterEmail(subject, html) {
   });
 }
 
+// Geocode a location, most-specific-first: try the full street address, then
+// fall back to city+country (Nominatim often can't resolve messy free-text
+// Indonesian addresses, so the fallback keeps the pin from vanishing).
+// Coordinates are jittered ~±500m (neighbourhood-level) for privacy — the pin
+// never marks the exact doorstep, and city-only pins get spread out a bit too.
+async function geocodeLocation(address, city, country) {
+  const queries = [];
+  if (address && city) queries.push([address, city, country].filter(Boolean).join(", "));
+  if (city) queries.push([city, country].filter(Boolean).join(", "));
+  for (const q of queries) {
+    try {
+      const r = await fetch("https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(q) + "&format=json&limit=1", {
+        headers: { "User-Agent": "alumni7099/1.0 (zapa.inweb.id)" }
+      });
+      const d = await r.json();
+      if (d && d[0]) return jitterCoords(parseFloat(d[0].lat), parseFloat(d[0].lon));
+    } catch(e) { console.error("Geocode error:", e.message); }
+  }
+  return null;
+}
+
+// Uniform random offset within a ~500m circle, so pins are neighbourhood-accurate.
+function jitterCoords(lat, lon) {
+  const R = 0.0045; // ~500m expressed in degrees of latitude
+  const w = R * Math.sqrt(Math.random()), t = 2 * Math.PI * Math.random();
+  const dLat = w * Math.cos(t);
+  const dLon = w * Math.sin(t) / Math.max(0.1, Math.cos(lat * Math.PI / 180));
+  return { lat: lat + dLat, lon: lon + dLon };
+}
+
+// Back-compat shim: city+country only (kept for any legacy caller).
 async function geocodeCity(city, country) {
   if (!city) return null;
-  const q = [city, country].filter(Boolean).join(", ");
-  try {
-    const r = await fetch("https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(q) + "&format=json&limit=1", {
-      headers: { "User-Agent": "alumni7099/1.0 (zapa.inweb.id)" }
-    });
-    const d = await r.json();
-    if (d && d[0]) return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) };
-  } catch(e) { console.error("Geocode error:", e.message); }
-  return null;
+  return geocodeLocation(null, city, country);
 }
 
 function emailTemplate(title, body, btnText, btnUrl) {
@@ -521,7 +544,7 @@ app.put("/api/profile", approvedMiddleware, async (req, res) => {
         WHERE id=?
       `).run(name, nickname, phone, city, country, job_title, company, bio, birthday, gender, address, hobby, university, kelas, class1, class2, user.alumni_id);
       if (city && (!existing.latitude || existing.city !== city)) {
-        geocodeCity(city, country).then(c => {
+        geocodeLocation(address, city, country).then(c => {
           if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, user.alumni_id);
         }).catch(() => {});
       }
@@ -533,7 +556,7 @@ app.put("/api/profile", approvedMiddleware, async (req, res) => {
       db.prepare("UPDATE users SET alumni_id = ?, name = ? WHERE id = ?").run(result.lastInsertRowid, name, user.id);
       if (city) {
         const newId = result.lastInsertRowid;
-        geocodeCity(city, country).then(c => {
+        geocodeLocation(address, city, country).then(c => {
           if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, newId);
         }).catch(() => {});
       }
@@ -750,7 +773,7 @@ app.get("/api/alumni", (req, res) => {
 });
 
 app.get("/api/map", (req, res) => {
-  const locations = db.prepare("SELECT name, nickname, city, country, latitude, longitude, job_title FROM alumni WHERE latitude IS NOT NULL AND is_public = 1").all();
+  const locations = db.prepare("SELECT name, nickname, city, country, latitude, longitude, job_title FROM alumni WHERE latitude IS NOT NULL AND latitude != '' AND is_public = 1").all();
   res.json(locations);
 });
 
@@ -1069,9 +1092,9 @@ app.post("/api/admin/approve/:id", adminMiddleware, (req, res) => {
         "Halo " + (u.name || "Alumni") + ",<br><br>Selamat! Akun kamu telah <b>disetujui</b> oleh admin. Kamu sekarang bisa mengakses semua fitur website alumni termasuk:<br><br>• Direktori alumni<br>• Peta interaktif<br>• Edit profil<br>• Upload foto",
         "Masuk Sekarang", "https://zapa.inweb.id/login"));
     if (u.alumni_id) {
-      var a = db.prepare("SELECT id, city, country, latitude FROM alumni WHERE id = ?").get(u.alumni_id);
+      var a = db.prepare("SELECT id, address, city, country, latitude FROM alumni WHERE id = ?").get(u.alumni_id);
       if (a && a.city && !a.latitude) {
-        geocodeCity(a.city, a.country).then(c => {
+        geocodeLocation(a.address, a.city, a.country).then(c => {
           if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, a.id);
         }).catch(() => {});
       }
@@ -1105,8 +1128,27 @@ app.get("/api/admin/alumni", adminMiddleware, (req, res) => {
 
 app.put("/api/admin/alumni/:id", adminMiddleware, (req, res) => {
   const { name, nickname, email, phone, city, country, job_title, company, class: kelas, class1, class2, university, hobby, birthday, gender, address, latitude, longitude } = req.body;
+  // Normalize empty strings to NULL so un-located alumni stay OFF the map.
+  // An empty-string lat/lng passes `latitude IS NOT NULL` and renders at [0,0]
+  // ("Null Island") — store NULL instead. Same for city/country for consistency.
+  const nz = (v) => (v === "" || v === undefined ? null : v);
+  const cityN = nz(city), countryN = nz(country);
+  let latN = nz(latitude), lonN = nz(longitude);
+  const id = req.params.id;
+
+  const existing = db.prepare("SELECT city, latitude FROM alumni WHERE id = ?").get(id);
+
   db.prepare("UPDATE alumni SET name=?, nickname=?, email=?, phone=?, city=?, country=?, job_title=?, company=?, class=?, class1=?, class2=?, university=?, hobby=?, birthday=?, gender=?, address=?, latitude=?, longitude=? WHERE id=?")
-    .run(name, nickname, email, phone, city, country, job_title, company, kelas, class1, class2, university, hobby, birthday, gender, address, latitude, longitude, req.params.id);
+    .run(name, nickname, nz(email), nz(phone), cityN, countryN, nz(job_title), nz(company), kelas, class1, class2, university, hobby, birthday, gender, address, latN, lonN, id);
+
+  // Auto-geocode on admin edit (previously only profile-save/approval did this):
+  // if a city is set but coordinates are missing, or the city changed, fill them in
+  // the background (non-blocking, won't overwrite admin-supplied coords).
+  if (cityN && latN == null && (!existing || !existing.latitude || existing.city !== cityN)) {
+    geocodeLocation(nz(address), cityN, countryN).then(c => {
+      if (c) db.prepare("UPDATE alumni SET latitude=?, longitude=? WHERE id=?").run(c.lat, c.lon, id);
+    });
+  }
   res.json({ success: true });
 });
 
