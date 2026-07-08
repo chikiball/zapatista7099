@@ -591,7 +591,7 @@ app.delete("/api/profile/photos/:id", approvedMiddleware, (req, res) => {
 
 // Directory (login required)
 app.get("/api/directory", approvedMiddleware, (req, res) => {
-  const alumni = db.prepare("SELECT id, name, nickname, city, country, job_title, company, class, hobby, university, bio FROM alumni WHERE is_public = 1 ORDER BY name").all();
+  const alumni = db.prepare("SELECT id, name, nickname, city, country, job_title, company, class, class1, class2, hobby, university, bio FROM alumni WHERE is_public = 1 ORDER BY name").all();
   const photos = db.prepare("SELECT alumni_id, filename FROM photos ORDER BY created_at DESC").all();
   const photoMap = {};
   photos.forEach(p => { if(!photoMap[p.alumni_id]) photoMap[p.alumni_id] = p.filename; });

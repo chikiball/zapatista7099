@@ -41,8 +41,14 @@ import Layout from "../layouts/Layout.astro";
 
       <!-- Filters -->
       <div class="flex flex-wrap gap-2 mb-6">
-        <select id="filter-class" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
-          <option value="">Semua Kelas</option>
+        <select id="filter-class1" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">Semua Kelas 1</option>
+        </select>
+        <select id="filter-class2" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">Semua Kelas 2</option>
+        </select>
+        <select id="filter-class3" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">Semua Kelas 3</option>
         </select>
         <select id="filter-city" class="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white">
           <option value="">Semua Kota</option>
@@ -96,30 +102,38 @@ import Layout from "../layouts/Layout.astro";
     }
 
     function buildFilters(){
-      var classes={},cities={};
+      var class1={},class2={},class3={},cities={};
       allData.forEach(function(a){
-        if(a.class)classes[a.class]=1;
+        if(a.class1)class1[a.class1]=1;
+        if(a.class2)class2[a.class2]=1;
+        if(a.class)class3[a.class]=1;
         if(a.city)cities[a.city]=1;
       });
-      var cs=document.getElementById('filter-class');
-      Object.keys(classes).sort().forEach(function(c){
-        var o=document.createElement('option');o.value=c;o.textContent=c;cs.appendChild(o);
-      });
-      var ct=document.getElementById('filter-city');
-      Object.keys(cities).sort().forEach(function(c){
-        var o=document.createElement('option');o.value=c;o.textContent=c;ct.appendChild(o);
-      });
+      function fill(id,map){
+        var sel=document.getElementById(id);
+        Object.keys(map).sort().forEach(function(c){
+          var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);
+        });
+      }
+      fill('filter-class1',class1);
+      fill('filter-class2',class2);
+      fill('filter-class3',class3);
+      fill('filter-city',cities);
     }
 
     function applyFilters(){
       var q=(document.getElementById('search').value||'').toLowerCase().trim();
-      var fc=document.getElementById('filter-class').value;
+      var f1=document.getElementById('filter-class1').value;
+      var f2=document.getElementById('filter-class2').value;
+      var f3=document.getElementById('filter-class3').value;
       var fct=document.getElementById('filter-city').value;
       var sort=document.getElementById('sort-by').value;
 
       filtered=allData.filter(function(a){
         if(q&&a.name.toLowerCase().indexOf(q)<0&&(!a.nickname||a.nickname.toLowerCase().indexOf(q)<0))return false;
-        if(fc&&a.class!==fc)return false;
+        if(f1&&a.class1!==f1)return false;
+        if(f2&&a.class2!==f2)return false;
+        if(f3&&a.class!==f3)return false;
         if(fct&&a.city!==fct)return false;
         return true;
       });
@@ -131,7 +145,7 @@ import Layout from "../layouts/Layout.astro";
       });
 
       document.getElementById('count-label').textContent='Menampilkan '+filtered.length+' dari '+allData.length+' alumni';
-      document.getElementById('reset-btn').classList.toggle('hidden',!q&&!fc&&!fct);
+      document.getElementById('reset-btn').classList.toggle('hidden',!q&&!f1&&!f2&&!f3&&!fct);
       renderCards();
     }
 
@@ -156,6 +170,8 @@ import Layout from "../layouts/Layout.astro";
         if(a.class)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>🎓</span>'+a.class+'</div>';
 
         var extra='';
+        if(a.class1)extra+='<div class="text-xs text-stone-400">📗 Kelas 1: '+a.class1+'</div>';
+        if(a.class2)extra+='<div class="text-xs text-stone-400">📘 Kelas 2: '+a.class2+'</div>';
         if(a.university)extra+='<div class="text-xs text-stone-400">🏫 '+a.university+'</div>';
         if(a.hobby)extra+='<div class="text-xs text-stone-400">🎮 '+a.hobby+'</div>';
         if(a.company)extra+='<div class="text-xs text-stone-400">🏢 '+a.company+'</div>';
@@ -175,12 +191,16 @@ import Layout from "../layouts/Layout.astro";
     }
 
     document.getElementById('search').addEventListener('input',applyFilters);
-    document.getElementById('filter-class').addEventListener('change',applyFilters);
+    document.getElementById('filter-class1').addEventListener('change',applyFilters);
+    document.getElementById('filter-class2').addEventListener('change',applyFilters);
+    document.getElementById('filter-class3').addEventListener('change',applyFilters);
     document.getElementById('filter-city').addEventListener('change',applyFilters);
     document.getElementById('sort-by').addEventListener('change',applyFilters);
     document.getElementById('reset-btn').addEventListener('click',function(){
       document.getElementById('search').value='';
-      document.getElementById('filter-class').value='';
+      document.getElementById('filter-class1').value='';
+      document.getElementById('filter-class2').value='';
+      document.getElementById('filter-class3').value='';
       document.getElementById('filter-city').value='';
       document.getElementById('sort-by').value='name';
       applyFilters();

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 7099 Project Context — For AI Assistants
 
 > Load this file at the start of a new conversation to resume work.
-> Last updated: 2026-07-07
+> Last updated: 2026-07-08
 
 ## What Is This
 
@@ -83,7 +83,8 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - **Signup requirements (email/password):** full name + **≥1 Kelas** (1/2/3) are required, enforced **server-side** in `/api/auth/signup` and client-side in `login.astro`. Captured into `users.reg_class1/2/3` and shown in the admin **Pending** queue + Telegram alert so admins can identify the person before linking.
 - **Signup requirements (Google):** Google Sign-In has no form, so `/api/auth/google` returns `needs_reg_info` (+ the JWT `token`) for a new Google user with no alumni link and no `reg_class*`. `login.astro` then shows a **required modal** (name prefilled from Google + ≥1 Kelas) that must be filled before continuing; it saves via `POST /api/auth/complete-registration` using `Authorization: Bearer <token>` (Safari private-mode safe — doesn't rely on the just-set cookie). So both signup paths capture name + kelas.
 - **Admin user list:** the Users tab shows a **Login** column with method badges — 🔵 Google (`google_id`), ⚪ Email (`password_hash`), or both. `/api/admin/users` returns `has_password` + `google_id` for this.
-- **Profile class fields:** alumni have `class1` (Kelas 1: 1-1…1-12, Lainnya), `class2` (Kelas 2: 2-A…2-L, Lainnya), and `class` (Kelas 3: IPA/IPS, Lainnya) — all editable in `/profile` and `/admin`. Only Kelas 3 (`class`) counts toward profile completeness.
+- **Profile class fields:** alumni have `class1` (Kelas 1: 1-1…1-12, Lainnya), `class2` (Kelas 2: 2-A…2-L, Lainnya), and `class` (Kelas 3: IPA/IPS, Lainnya) — all editable in `/profile` and `/admin`. Only Kelas 3 (`class`) counts toward profile completeness. All three are shown in the **directory** cards (`📗 Kelas 1` / `📘 Kelas 2` in the card's extra section, `🎓` Kelas 3 in the main details) and as columns in the **admin** alumni table; `/api/directory` returns `class1`/`class2` alongside `class`. The directory has **three separate filter dropdowns** (Semua Kelas 1 / 2 / 3), each populated from actual data values and AND-combined with the city filter + search.
+- **Profile email field:** `/profile` shows the logged-in account's email in a **read-only, `disabled`** field at the top of the form (populated from `/api/auth/me` → `d.user.email`). It has no `name` attribute, so it's never submitted or editable.
 - **Auth-aware nav (all pages):** on login, `#nav-login` swaps "Masuk" → "Profile" (→ `/profile`) and a `#nav-welcome` span shows "Welcome, `<Name>`" on the **left next to the logo** (`truncate` + `shrink-0` so it survives narrow viewports). Homepage also hides the "Masuk/Daftar" CTAs and shows a **"Profil kamu belum lengkap"** banner listing the missing fields. Profile page shows the same notice and highlights the specific empty `[data-req]` inputs.
 - **Admin:** Dashboard, approval queue, alumni/user management, events management, articles management, settings (SMTP + Telegram)
 - **Telegram:** Bot notifies group on new registration

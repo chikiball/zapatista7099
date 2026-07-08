@@ -45,7 +45,7 @@ import Layout from "../layouts/Layout.astro";
         <input type="text" id="al-search" placeholder="Cari alumni..." class="flex-1 border rounded-lg px-3 py-2 text-sm" oninput="filterAlumni()">
       </div>
       <div class="overflow-x-auto"><table class="w-full text-sm">
-        <thead><tr class="bg-stone-100 text-left"><th class="p-2">Nama</th><th class="p-2">Panggilan</th><th class="p-2">Kota</th><th class="p-2">Kelas</th><th class="p-2">Pekerjaan</th><th class="p-2 w-20"></th></tr></thead>
+        <thead><tr class="bg-stone-100 text-left"><th class="p-2">Nama</th><th class="p-2">Panggilan</th><th class="p-2">Kota</th><th class="p-2">Kelas 1</th><th class="p-2">Kelas 2</th><th class="p-2">Kelas</th><th class="p-2">Pekerjaan</th><th class="p-2 w-20"></th></tr></thead>
         <tbody id="al-body"></tbody>
       </table></div>
     </div>
@@ -219,7 +219,7 @@ import Layout from "../layouts/Layout.astro";
     var q=(document.getElementById('al-search').value||'').toLowerCase();
     var f=alumniData.filter(function(a){return !q||a.name.toLowerCase().indexOf(q)>=0||(a.nickname||'').toLowerCase().indexOf(q)>=0});
     document.getElementById('al-body').innerHTML=f.slice(0,100).map(function(a){
-      return '<tr class="border-b hover:bg-stone-50"><td class="p-2">'+a.name+'</td><td class="p-2 text-stone-500">'+(a.nickname||'')+'</td><td class="p-2 text-stone-500">'+(a.city||'')+'</td><td class="p-2 text-stone-500">'+(a.class||'')+'</td><td class="p-2 text-stone-500">'+(a.job_title||'')+'</td><td class="p-2"><button type="button" onclick=\'editAlumni('+a.id+')\' class="text-amber-700 text-xs hover:underline">Edit</button> <button type="button" onclick=\'delAlumni('+a.id+')\' class="text-red-500 text-xs hover:underline ml-1">Del</button></td></tr>';
+      return '<tr class="border-b hover:bg-stone-50"><td class="p-2">'+a.name+'</td><td class="p-2 text-stone-500">'+(a.nickname||'')+'</td><td class="p-2 text-stone-500">'+(a.city||'')+'</td><td class="p-2 text-stone-500">'+(a.class1||'')+'</td><td class="p-2 text-stone-500">'+(a.class2||'')+'</td><td class="p-2 text-stone-500">'+(a.class||'')+'</td><td class="p-2 text-stone-500">'+(a.job_title||'')+'</td><td class="p-2"><button type="button" onclick=\'editAlumni('+a.id+')\' class="text-amber-700 text-xs hover:underline">Edit</button> <button type="button" onclick=\'delAlumni('+a.id+')\' class="text-red-500 text-xs hover:underline ml-1">Del</button></td></tr>';
     }).join('')+(f.length>100?'<tr><td colspan="6" class="p-2 text-center text-stone-400 text-xs">Showing 100 of '+f.length+'</td></tr>':'');
   }
 

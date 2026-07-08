@@ -26,6 +26,11 @@ import Layout from "../layouts/Layout.astro";
         <h2 class="text-xl font-bold text-stone-800 mb-6">Data Profil</h2>
         <form id="profile-form" onsubmit="saveProfile(event)">
           <div class="grid md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+              <label class="block text-sm font-medium text-stone-700 mb-1">Email</label>
+              <input type="email" id="profile-email" readonly disabled class="w-full border border-stone-200 rounded-xl px-4 py-3 text-sm bg-stone-100 text-stone-500 cursor-not-allowed outline-none">
+              <p class="text-xs text-stone-400 mt-1">Email login kamu — tidak bisa diubah.</p>
+            </div>
             <div>
               <label class="block text-sm font-medium text-stone-700 mb-1">Nama Lengkap *</label>
               <input type="text" name="name" required data-req class="w-full border border-stone-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none">
@@ -147,7 +152,7 @@ import Layout from "../layouts/Layout.astro";
   <script is:inline>
     var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university","class","class1","class2"];
 
-    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include",cache:"no-store"});if(!r.ok){if(r.status===401){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"})}catch(e){}window.location.href="/login";return}showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("notify-toggle").checked=d.user.notify_email!==0;setupPasswordCard(!!d.user.has_password);if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}showIncomplete(d.missing_fields||[])}catch(e){showNotLogged()}}
+    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include",cache:"no-store"});if(!r.ok){if(r.status===401){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"})}catch(e){}window.location.href="/login";return}showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("profile-email").value=d.user.email||"";document.getElementById("notify-toggle").checked=d.user.notify_email!==0;setupPasswordCard(!!d.user.has_password);if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}showIncomplete(d.missing_fields||[])}catch(e){showNotLogged()}}
 
     // Nudge for the specific empty required fields (not every field).
     function showIncomplete(missing){var f=document.getElementById("profile-form");Array.prototype.forEach.call(f.querySelectorAll("[data-req]"),function(el){el.classList.remove("ring-2","ring-amber-400","border-amber-400")});if(!missing.length){document.getElementById("incomplete-banner").classList.add("hidden");return}document.getElementById("incomplete-fields").textContent=missing.map(function(m){return m.label}).join(", ");document.getElementById("incomplete-banner").classList.remove("hidden");missing.forEach(function(m){var el=f.querySelector('[name="'+m.key+'"]');if(el){el.classList.add("ring-2","ring-amber-400","border-amber-400")}})}
