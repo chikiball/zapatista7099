@@ -378,6 +378,7 @@ app.post("/api/auth/google", async (req, res) => {
         "Kunjungi Website", "https://zapa.inweb.id"));
     sendTelegram("🆕 <b>Pendaftaran Baru!</b>\n" +
         "Nama: " + (name || "-") + "\n" +
+        "Kelas: ⏳ menunggu diisi di form\n" +
         "Email: " + email + "\n" +
         "Metode: Google\n" +
         (alumniMatch ? "✅ Matched: " + alumniMatch.name + " (" + (alumniMatch.nickname||"") + ")\n" : "❌ No alumni match\n") +
@@ -409,8 +410,29 @@ app.post("/api/auth/complete-registration", authMiddleware, (req, res) => {
     if (!name || !name.trim()) return res.status(400).json({ error: "Nama lengkap wajib diisi" });
     const c1 = (class1 || "").trim(), c2 = (class2 || "").trim(), c3 = (class3 || "").trim();
     if (!c1 && !c2 && !c3) return res.status(400).json({ error: "Isi minimal salah satu Kelas (1, 2, atau 3)" });
+
+    // Snapshot before update so we only notify on the FIRST completion (avoid
+    // re-notifying if an unmatched user re-opens the modal on a later login).
+    const before = db.prepare("SELECT email, alumni_id, reg_class1, reg_class2, reg_class3 FROM users WHERE id = ?").get(req.user.id);
+    const alreadyCompleted = !!(before && (before.reg_class1 || before.reg_class2 || before.reg_class3));
+
     db.prepare("UPDATE users SET name = ?, reg_class1 = ?, reg_class2 = ?, reg_class3 = ? WHERE id = ?")
       .run(name.trim(), c1 || null, c2 || null, c3 || null, req.user.id);
+
+    // Now that we have the final name + kelas from the modal, send the complete
+    // Telegram alert (the Google signup alert fired earlier without kelas).
+    if (before && !alreadyCompleted) {
+      const kelasStr = [c1, c2, c3].filter(Boolean).join(" / ");
+      const alumniMatch = before.alumni_id ? db.prepare("SELECT name, nickname FROM alumni WHERE id = ?").get(before.alumni_id) : null;
+      sendTelegram("✅ <b>Data Pendaftaran Dilengkapi (Google)</b>\n" +
+        "Nama: " + name.trim() + "\n" +
+        "Kelas: " + (kelasStr || "-") + "\n" +
+        "Email: " + before.email + "\n" +
+        "Metode: Google\n" +
+        (alumniMatch ? "✅ Matched: " + alumniMatch.name + " (" + (alumniMatch.nickname||"") + ")\n" : "❌ No alumni match\n") +
+        "Status: ⏳ Pending\n" +
+        "👉 https://zapa.inweb.id/admin");
+    }
     res.json({ success: true });
   } catch(e) {
     console.error("complete-registration error:", e);
