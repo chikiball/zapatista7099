@@ -129,16 +129,35 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 
 ## Deploy
 
+**`/var/www/alumni` is a git checkout of `origin/main`** (adopted in place 2026-07-10). Deploy is git-pull-based via `deploy.sh` (tracked in the repo, lives at the server root):
+
 ```bash
 ssh -i /path/to/zapa7099_key -p 52017 zapa@103.16.198.61
-cd /var/www/alumni
-sudo chown -R zapa:zapa dist/ .astro/
-npm run build
-sudo chown -R www-data:www-data dist/
-sudo rm -rf dist/photos && sudo ln -sf /var/www/alumni/public/photos dist/photos
-sudo systemctl reload nginx
-pm2 restart alumni-api  # if API changed
+cd /var/www/alumni && ./deploy.sh
 ```
+
+`deploy.sh` does: chown build dirs → `git fetch` + `git reset --hard origin/main` → `npm install` (only if `package.json` changed) → `npm run build` → chown `dist/` to www-data → recreate `dist/photos` symlink → reload nginx → `pm2 restart alumni-api` **only if `api/`, `ecosystem.config.cjs`, or `package.json` changed**. So the normal flow is: commit + `git push` locally, then run `./deploy.sh` on the server.
+
+- **Edits must go through git now** — anything edited directly in a tracked file on the server is wiped by the next `git reset --hard`. Server-only files stay untracked & safe: `ecosystem.config.cjs` (holds `JWT_SECRET`), `api/alumni.db`, `backups/`, `node_modules/`, `dist/`, `public/photos/`.
+- `package-lock.json` is **not** tracked; deploy uses `npm install` (not `npm ci`) when deps change.
+- Manual longhand (if not using the script): `sudo chown -R zapa:zapa dist/ .astro/ && npm run build && sudo chown -R www-data:www-data dist/ && sudo rm -rf dist/photos && sudo ln -sf /var/www/alumni/public/photos dist/photos && sudo systemctl reload nginx && pm2 restart alumni-api`. (There's also a `deploy` bash alias on the server doing the chown+build+reload part, but it predates git and doesn't pull — prefer `./deploy.sh`.)
+
+### DB backups
+
+`backup-db.sh` (tracked) takes a **WAL-safe `sqlite3 .backup`** snapshot of `api/alumni.db`, gzips it into `backups/` (keeps newest 30), pushes a client-side-encrypted copy offsite to Google Drive via `rclone copy` to `gdrive-crypt:` (also keeps newest 30), **and mirrors `public/photos/` (image files, not in the DB) to `gdrive-crypt:photos` via `rclone sync`**. All offsite steps are non-fatal — a Drive/network failure logs but never fails the local DB backup. Scheduled via **cron for user `zapa`, daily 03:00**:
+
+```cron
+0 3 * * * /var/www/alumni/backup-db.sh >> /var/www/alumni/backups/backup.log 2>&1
+```
+
+- **What's backed up:** the DB (all records) **and** the 348 uploaded image files (~302 MB) under `public/photos/`. The DB only stores photo *filenames*; the pixels live on disk, so both are needed for a full restore.
+- **Photos mirror:** `rclone sync` (deletions on the live folder propagate offsite). Guards: skips if the source dir looks empty/missing (won't wipe offsite if unmounted), and `--max-delete 100` aborts a runaway mass-deletion. First run ~13 min for 302 MB; subsequent runs near-instant (only changed files).
+- **Offsite (rclone):** `gdrive-base` (Google Drive, `drive.file` scope = least privilege) wrapped by `gdrive-crypt` (client-side encryption — Google only ever stores ciphertext + encrypted filenames). Config at `~/.config/rclone/rclone.conf` (chmod 600) on the server. The crypt password + salt are held in the site owner's password manager — **required to decrypt a backup if the server is lost** (they also live obscured in `rclone.conf`, but that's gone if the box is gone).
+- **Restore (local DB):** `gunzip -c backups/alumni-YYYYMMDD-HHMMSS.db.gz > api/alumni.db` (stop the API first).
+- **Restore (offsite DB):** `rclone copy gdrive-crypt:alumni-YYYYMMDD-HHMMSS.db.gz /tmp/ && gunzip /tmp/alumni-*.db.gz` — the crypt remote decrypts transparently; needs `rclone.conf` (or the saved crypt password + salt on a fresh rclone setup).
+- **Restore (offsite photos):** `rclone copy gdrive-crypt:photos /var/www/alumni/public/photos` — then recreate the `dist/photos` symlink if needed.
+- Verified end-to-end 2026-07-10: DB download → decrypt → `integrity_check ok` (508 alumni / 110 users); photos 348 offsite = 348 live, byte-for-byte spot-check.
+
 
 ## One-Time Scripts (in scripts/)
 
