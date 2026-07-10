@@ -43,6 +43,68 @@ try { db.exec("ALTER TABLE alumni ADD COLUMN google_id TEXT"); } catch(e) { /* c
 try { db.exec("ALTER TABLE alumni ADD COLUMN class1 TEXT"); } catch(e) { /* column exists */ }
 try { db.exec("ALTER TABLE alumni ADD COLUMN class2 TEXT"); } catch(e) { /* column exists */ }
 
+// Crowd-sourced class suggestions: any approved user can suggest a class for
+// another alumni's card. Suggestions accumulate and display in the directory
+// ONLY while that alumni's own field is empty — once the person (or an admin)
+// fills it, the confirmed value takes over. One vote per user per field (upsert).
+db.exec(`CREATE TABLE IF NOT EXISTS class_suggestions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_alumni_id INTEGER REFERENCES alumni(id),
+  field TEXT NOT NULL,
+  value TEXT NOT NULL,
+  suggested_by_user_id INTEGER REFERENCES users(id),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(target_alumni_id, field, suggested_by_user_id)
+)`);
+
+// Allowed class values per field (mirrors the profile dropdowns). Suggestions
+// are constrained to these so tallies stay clean — no free text.
+const CLASS_FIELDS = ["class1", "class2", "class"];
+const CLASS_OPTIONS = {
+  class1: ["1-1","1-2","1-3","1-4","1-5","1-6","1-7","1-8","1-9","1-10","1-11","1-12","Lainnya"],
+  class2: ["2-A","2-B","2-C","2-D","2-E","2-F","2-G","2-H","2-I","2-J","2-K","2-L","Lainnya"],
+  class:  ["IPA 1","IPA 2","IPA 3","IPA 4","IPA 5","IPA 6","IPA 7","IPA 8","IPS 1","IPS 2","IPS 3","IPS 4","Lainnya"],
+};
+// Aggregate suggestions for a set of alumni, returning per-alumni tallies for
+// ONLY the fields that alumni hasn't filled themselves. rows: [{id, class1, class2, class}].
+function suggestionsForAlumni(rows, viewerUserId) {
+  const byId = {};
+  rows.forEach(a => { byId[a.id] = a; });
+  const ids = rows.map(a => a.id);
+  if (!ids.length) return {};
+  const placeholders = ids.map(() => "?").join(",");
+  const agg = db.prepare(
+    `SELECT target_alumni_id, field, value, COUNT(*) AS count
+     FROM class_suggestions WHERE target_alumni_id IN (${placeholders})
+     GROUP BY target_alumni_id, field, value`
+  ).all(...ids);
+  const mine = viewerUserId ? db.prepare(
+    `SELECT target_alumni_id, field, value FROM class_suggestions
+     WHERE suggested_by_user_id = ? AND target_alumni_id IN (${placeholders})`
+  ).all(viewerUserId, ...ids) : [];
+  const mineMap = {}; // "alumniId:field" -> value the viewer suggested
+  mine.forEach(m => { mineMap[m.target_alumni_id + ":" + m.field] = m.value; });
+
+  const out = {}; // alumniId -> { suggestions: {field:[{value,count}]}, my: {field:value} }
+  agg.forEach(r => {
+    const a = byId[r.target_alumni_id];
+    // Only surface suggestions for a field the alumni hasn't filled in themselves.
+    if (!a || (a[r.field] !== null && a[r.field] !== undefined && String(a[r.field]).trim() !== "")) return;
+    if (!out[r.target_alumni_id]) out[r.target_alumni_id] = { suggestions: {}, my: {} };
+    const s = out[r.target_alumni_id].suggestions;
+    (s[r.field] = s[r.field] || []).push({ value: r.value, count: r.count });
+  });
+  Object.keys(out).forEach(aid => {
+    const o = out[aid];
+    Object.keys(o.suggestions).forEach(f => {
+      o.suggestions[f].sort((x, y) => y.count - x.count || x.value.localeCompare(y.value));
+      const mv = mineMap[aid + ":" + f];
+      if (mv) o.my[f] = mv;
+    });
+  });
+  return out;
+}
+
 // ── App Setup ───────────────────────────────────────
 const app = express();
 app.disable("etag"); // never let auth/session responses be conditionally cached (304)
@@ -495,7 +557,13 @@ app.get("/api/auth/me", authMiddleware, (req, res) => {
   const isFilled = (v) => v !== null && v !== undefined && String(v).trim() !== "";
   const missing_fields = REQUIRED.filter((f) => !(profile && isFilled(profile[f.key])));
   const profile_complete = missing_fields.length === 0;
-  res.json({ user, profile, profile_complete, missing_fields });
+  // Suggestions others made for the caller's own empty class fields → profile prompt.
+  let class_suggestions = {};
+  if (profile) {
+    const s = suggestionsForAlumni([{ id: profile.id, class1: profile.class1, class2: profile.class2, class: profile.class }], null);
+    class_suggestions = (s[profile.id] && s[profile.id].suggestions) || {};
+  }
+  res.json({ user, profile, profile_complete, missing_fields, class_suggestions });
 });
 
 // Logout
@@ -520,6 +588,18 @@ app.put("/api/profile/notifications", approvedMiddleware, (req, res) => {
   const { notify_email } = req.body;
   db.prepare("UPDATE users SET notify_email=? WHERE id=?").run(notify_email ? 1 : 0, req.user.id);
   res.json({ success: true });
+});
+
+// Adopt a crowd-sourced class suggestion into your own alumni record ("admit").
+app.post("/api/profile/adopt-suggestion", approvedMiddleware, (req, res) => {
+  const field = String(req.body.field || "");
+  const value = String(req.body.value || "").trim();
+  if (!CLASS_FIELDS.includes(field)) return res.status(400).json({ error: "Field kelas tidak valid" });
+  if (!CLASS_OPTIONS[field].includes(value)) return res.status(400).json({ error: "Nilai kelas tidak valid" });
+  const me = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+  if (!me || !me.alumni_id) return res.status(400).json({ error: "Profil belum tertaut" });
+  db.prepare("UPDATE alumni SET " + field + " = ? WHERE id = ?").run(value, me.alumni_id);
+  res.json({ success: true, field, value });
 });
 
 app.get("/api/unsubscribe", (req, res) => {
@@ -640,8 +720,64 @@ app.get("/api/directory", approvedMiddleware, (req, res) => {
   const photos = db.prepare("SELECT alumni_id, filename FROM photos ORDER BY created_at DESC").all();
   const photoMap = {};
   photos.forEach(p => { if(!photoMap[p.alumni_id]) photoMap[p.alumni_id] = p.filename; });
-  alumni.forEach(a => { a.photo = photoMap[a.id] || null; });
+  const sugg = suggestionsForAlumni(alumni, req.user.id);
+  const me = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+  const myAlumniId = me ? me.alumni_id : null;
+  alumni.forEach(a => {
+    a.photo = photoMap[a.id] || null;
+    a.suggestions = (sugg[a.id] && sugg[a.id].suggestions) || {};
+    a.my_suggestions = (sugg[a.id] && sugg[a.id].my) || {};
+    a.is_self = myAlumniId != null && a.id === myAlumniId; // hide the suggest UI on your own card
+  });
   res.json(alumni);
+});
+
+// Suggest a class for another alumni's card (crowd-sourced). One vote per
+// user per field — re-suggesting replaces your previous vote (upsert).
+app.post("/api/directory/:alumniId/suggest-class", approvedMiddleware, (req, res) => {
+  try {
+    const targetId = parseInt(req.params.alumniId, 10);
+    const field = String(req.body.field || "");
+    const value = String(req.body.value || "").trim();
+    if (!CLASS_FIELDS.includes(field)) return res.status(400).json({ error: "Field kelas tidak valid" });
+    if (!CLASS_OPTIONS[field].includes(value)) return res.status(400).json({ error: "Nilai kelas tidak valid" });
+
+    const target = db.prepare("SELECT id, is_public, " + field + " AS current FROM alumni WHERE id = ?").get(targetId);
+    if (!target || !target.is_public) return res.status(404).json({ error: "Alumni tidak ditemukan" });
+    if (target.current && String(target.current).trim() !== "") return res.status(409).json({ error: "Kelas ini sudah diisi pemiliknya" });
+
+    const me = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
+    if (me && me.alumni_id === targetId) return res.status(400).json({ error: "Tidak bisa menyarankan kelas untuk kartu sendiri" });
+
+    db.prepare(
+      `INSERT INTO class_suggestions (target_alumni_id, field, value, suggested_by_user_id)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(target_alumni_id, field, suggested_by_user_id)
+       DO UPDATE SET value = excluded.value, created_at = CURRENT_TIMESTAMP`
+    ).run(targetId, field, value, req.user.id);
+
+    // Return the fresh tally for this card+field so the UI can update in place.
+    const tally = db.prepare(
+      "SELECT value, COUNT(*) AS count FROM class_suggestions WHERE target_alumni_id = ? AND field = ? GROUP BY value ORDER BY count DESC, value"
+    ).all(targetId, field);
+    res.json({ success: true, field, mine: value, tally });
+  } catch(e) {
+    console.error("suggest-class error:", e);
+    res.status(500).json({ error: "Gagal menyimpan usulan" });
+  }
+});
+
+// Retract your own suggestion for a field.
+app.delete("/api/directory/:alumniId/suggest-class", approvedMiddleware, (req, res) => {
+  const targetId = parseInt(req.params.alumniId, 10);
+  const field = String(req.body.field || "");
+  if (!CLASS_FIELDS.includes(field)) return res.status(400).json({ error: "Field kelas tidak valid" });
+  db.prepare("DELETE FROM class_suggestions WHERE target_alumni_id = ? AND field = ? AND suggested_by_user_id = ?")
+    .run(targetId, field, req.user.id);
+  const tally = db.prepare(
+    "SELECT value, COUNT(*) AS count FROM class_suggestions WHERE target_alumni_id = ? AND field = ? GROUP BY value ORDER BY count DESC, value"
+  ).all(targetId, field);
+  res.json({ success: true, field, tally });
 });
 
 
@@ -1163,6 +1299,59 @@ app.delete("/api/admin/alumni/:id", adminMiddleware, (req, res) => {
 // Admin unlink user from alumni (wrong match)
 app.post("/api/admin/unlink/:id", adminMiddleware, (req, res) => {
   db.prepare("UPDATE users SET alumni_id = NULL WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// Admin: crowd-sourced class suggestions awaiting a real value, grouped by
+// alumni + field, with vote counts and suggester names for moderation.
+app.get("/api/admin/suggestions", adminMiddleware, (req, res) => {
+  const rows = db.prepare(`
+    SELECT cs.target_alumni_id, cs.field, cs.value, cs.id AS suggestion_id,
+           a.name AS alumni_name, a.nickname AS alumni_nick,
+           a.class1 AS a_class1, a.class2 AS a_class2, a.class AS a_class,
+           u.name AS suggester_name, u.email AS suggester_email
+    FROM class_suggestions cs
+    JOIN alumni a ON a.id = cs.target_alumni_id
+    LEFT JOIN users u ON u.id = cs.suggested_by_user_id
+    ORDER BY a.name, cs.field, cs.value
+  `).all();
+  const filled = { class1: "a_class1", class2: "a_class2", class: "a_class" };
+  const groups = {}; // "alumniId:field" -> group
+  rows.forEach(r => {
+    // Only show groups still actionable (the alumni's own field is empty).
+    const own = r[filled[r.field]];
+    if (own && String(own).trim() !== "") return;
+    const key = r.target_alumni_id + ":" + r.field;
+    if (!groups[key]) groups[key] = {
+      alumni_id: r.target_alumni_id, alumni_name: r.alumni_name, alumni_nick: r.alumni_nick,
+      field: r.field, values: {}
+    };
+    const g = groups[key];
+    if (!g.values[r.value]) g.values[r.value] = { value: r.value, count: 0, ids: [], suggesters: [] };
+    g.values[r.value].count++;
+    g.values[r.value].ids.push(r.suggestion_id);
+    g.values[r.value].suggesters.push(r.suggester_name || r.suggester_email || "?");
+  });
+  const out = Object.values(groups).map(g => ({
+    ...g,
+    values: Object.values(g.values).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+  }));
+  res.json(out);
+});
+
+// Admin: promote a suggested value into the real alumni field.
+app.post("/api/admin/alumni/:id/promote-class", adminMiddleware, (req, res) => {
+  const field = String(req.body.field || "");
+  const value = String(req.body.value || "").trim();
+  if (!CLASS_FIELDS.includes(field)) return res.status(400).json({ error: "Field kelas tidak valid" });
+  if (!CLASS_OPTIONS[field].includes(value)) return res.status(400).json({ error: "Nilai kelas tidak valid" });
+  db.prepare("UPDATE alumni SET " + field + " = ? WHERE id = ?").run(value, req.params.id);
+  res.json({ success: true });
+});
+
+// Admin: delete a single (abusive) suggestion row.
+app.delete("/api/admin/suggestions/:id", adminMiddleware, (req, res) => {
+  db.prepare("DELETE FROM class_suggestions WHERE id = ?").run(req.params.id);
   res.json({ success: true });
 });
 
