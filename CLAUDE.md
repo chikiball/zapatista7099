@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 7099 Project Context — For AI Assistants
 
 > Load this file at the start of a new conversation to resume work.
-> Last updated: 2026-07-08
+> Last updated: 2026-07-11
 
 ## What Is This
 
