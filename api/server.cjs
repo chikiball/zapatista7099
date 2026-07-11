@@ -88,8 +88,12 @@ function suggestionsForAlumni(rows, viewerUserId) {
   const out = {}; // alumniId -> { suggestions: {field:[{value,count}]}, my: {field:value} }
   agg.forEach(r => {
     const a = byId[r.target_alumni_id];
-    // Only surface suggestions for a field the alumni hasn't filled in themselves.
-    if (!a || (a[r.field] !== null && a[r.field] !== undefined && String(a[r.field]).trim() !== "")) return;
+    if (!a) return;
+    // Suggestions surface for BOTH empty fields (fill-in) and filled fields
+    // (corrections — the info might be wrong). Drop only a suggestion that
+    // agrees with the current value: it's not a correction, adds no signal.
+    const cur = (a[r.field] === null || a[r.field] === undefined) ? "" : String(a[r.field]).trim();
+    if (cur !== "" && cur === String(r.value).trim()) return;
     if (!out[r.target_alumni_id]) out[r.target_alumni_id] = { suggestions: {}, my: {} };
     const s = out[r.target_alumni_id].suggestions;
     (s[r.field] = s[r.field] || []).push({ value: r.value, count: r.count });
@@ -744,10 +748,13 @@ app.post("/api/directory/:alumniId/suggest-class", approvedMiddleware, (req, res
 
     const target = db.prepare("SELECT id, is_public, " + field + " AS current FROM alumni WHERE id = ?").get(targetId);
     if (!target || !target.is_public) return res.status(404).json({ error: "Alumni tidak ditemukan" });
-    if (target.current && String(target.current).trim() !== "") return res.status(409).json({ error: "Kelas ini sudah diisi pemiliknya" });
 
     const me = db.prepare("SELECT alumni_id FROM users WHERE id = ?").get(req.user.id);
     if (me && me.alumni_id === targetId) return res.status(400).json({ error: "Tidak bisa menyarankan kelas untuk kartu sendiri" });
+
+    // Suggestions are allowed on filled fields too (as corrections). The only
+    // pointless case is suggesting exactly the value that's already recorded.
+    if (target.current && String(target.current).trim() === value) return res.status(409).json({ error: "Itu kelas yang sudah tercatat sekarang" });
 
     db.prepare(
       `INSERT INTO class_suggestions (target_alumni_id, field, value, suggested_by_user_id)
@@ -1302,8 +1309,9 @@ app.post("/api/admin/unlink/:id", adminMiddleware, (req, res) => {
   res.json({ success: true });
 });
 
-// Admin: crowd-sourced class suggestions awaiting a real value, grouped by
-// alumni + field, with vote counts and suggester names for moderation.
+// Admin: crowd-sourced class suggestions, grouped by alumni + field, with vote
+// counts and suggester names for moderation. Includes corrections to fields
+// that are already filled (shows the current value alongside the suggestions).
 app.get("/api/admin/suggestions", adminMiddleware, (req, res) => {
   const rows = db.prepare(`
     SELECT cs.target_alumni_id, cs.field, cs.value, cs.id AS suggestion_id,
@@ -1315,16 +1323,17 @@ app.get("/api/admin/suggestions", adminMiddleware, (req, res) => {
     LEFT JOIN users u ON u.id = cs.suggested_by_user_id
     ORDER BY a.name, cs.field, cs.value
   `).all();
-  const filled = { class1: "a_class1", class2: "a_class2", class: "a_class" };
+  const curCol = { class1: "a_class1", class2: "a_class2", class: "a_class" };
   const groups = {}; // "alumniId:field" -> group
   rows.forEach(r => {
-    // Only show groups still actionable (the alumni's own field is empty).
-    const own = r[filled[r.field]];
-    if (own && String(own).trim() !== "") return;
+    const cur = r[curCol[r.field]];
+    const curStr = (cur === null || cur === undefined) ? "" : String(cur).trim();
+    // Drop suggestions that just agree with the current value (no signal).
+    if (curStr !== "" && curStr === String(r.value).trim()) return;
     const key = r.target_alumni_id + ":" + r.field;
     if (!groups[key]) groups[key] = {
       alumni_id: r.target_alumni_id, alumni_name: r.alumni_name, alumni_nick: r.alumni_nick,
-      field: r.field, values: {}
+      field: r.field, current: curStr, values: {}
     };
     const g = groups[key];
     if (!g.values[r.value]) g.values[r.value] = { value: r.value, count: 0, ids: [], suggesters: [] };

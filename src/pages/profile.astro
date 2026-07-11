@@ -155,18 +155,21 @@ import Layout from "../layouts/Layout.astro";
   <script is:inline>
     var FIELDS = ["name","nickname","phone","city","country","job_title","company","bio","birthday","gender","address","hobby","university","class","class1","class2"];
 
-    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include",cache:"no-store"});if(!r.ok){if(r.status===401){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"})}catch(e){}window.location.href="/login";return}showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("profile-email").value=d.user.email||"";document.getElementById("notify-toggle").checked=d.user.notify_email!==0;setupPasswordCard(!!d.user.has_password);if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}showIncomplete(d.missing_fields||[]);showSuggestionPrompt(d.class_suggestions)}catch(e){showNotLogged()}}
+    async function loadProfile(){try{var r=await fetch("/api/auth/me",{credentials:"include",cache:"no-store"});if(!r.ok){if(r.status===401){try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"})}catch(e){}window.location.href="/login";return}showNotLogged();return}var d=await r.json();document.getElementById("loading").classList.add("hidden");document.getElementById("profile-content").classList.remove("hidden");document.getElementById("nav-name").textContent=d.user.name||d.user.email;document.getElementById("profile-email").value=d.user.email||"";document.getElementById("notify-toggle").checked=d.user.notify_email!==0;setupPasswordCard(!!d.user.has_password);if(d.profile){document.getElementById("match-banner").classList.remove("hidden");fillForm(d.profile)}else{document.getElementById("no-match-banner").classList.remove("hidden")}showIncomplete(d.missing_fields||[]);showSuggestionPrompt(d.class_suggestions,d.profile)}catch(e){showNotLogged()}}
 
-    // Show what other alumni suggested for the user's still-empty class fields,
+    // Show what other alumni suggested for the user's class fields — both empty
+    // fields (fill-in) and filled ones (corrections, since info can be wrong),
     // with one-click adopt (the "until they admit their class" confirmation).
     var SUGG_LABELS={class1:"Kelas 1",class2:"Kelas 2",class:"Kelas 3"};
-    function showSuggestionPrompt(cs){
-      var box=document.getElementById("suggestion-prompt");cs=cs||{};
+    function showSuggestionPrompt(cs,profile){
+      var box=document.getElementById("suggestion-prompt");cs=cs||{};profile=profile||{};
       var fields=Object.keys(cs).filter(function(f){return cs[f]&&cs[f].length});
       if(!fields.length){box.classList.add("hidden");box.innerHTML="";return}
-      var html='<p class="text-sky-900 font-semibold text-sm mb-1">👋 Teman-teman menandai kelasmu</p><p class="text-sky-800 text-xs mb-3">Pilih yang benar untuk mengisi profilmu.</p>';
+      var html='<p class="text-sky-900 font-semibold text-sm mb-1">👋 Teman-teman menandai kelasmu</p><p class="text-sky-800 text-xs mb-3">Pilih yang benar untuk memperbarui profilmu.</p>';
       fields.forEach(function(f){
-        html+='<div class="mb-2 flex flex-wrap items-center gap-2"><span class="text-sm text-sky-800 font-medium">'+SUGG_LABELS[f]+':</span>';
+        var cur=profile[f]?String(profile[f]):"";
+        var lbl=SUGG_LABELS[f]+(cur?' (sekarang: '+cur+')':'');
+        html+='<div class="mb-2 flex flex-wrap items-center gap-2"><span class="text-sm text-sky-800 font-medium">'+lbl+':</span>';
         cs[f].forEach(function(t){
           html+='<button type="button" class="adopt-btn bg-white border border-sky-300 text-sky-800 rounded-lg px-2 py-1 text-xs hover:bg-sky-100" data-field="'+f+'" data-value="'+t.value+'">'+t.value+' ('+t.count+') ✓</button>';
         });

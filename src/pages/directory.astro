@@ -103,6 +103,20 @@ import Layout from "../layouts/Layout.astro";
       return html;
     }
 
+    // Small inline "✎" button on a FILLED field so anyone can propose a correction.
+    function correctBtn(a,field){
+      if(a.is_self)return '';
+      var mine=(a.my_suggestions&&a.my_suggestions[field])||'';
+      var lbl=mine?('✎ '+mine):'✎';
+      return ' <button type="button" class="suggest-btn text-amber-600 hover:underline" data-aid="'+a.id+'" data-field="'+field+'" title="Sarankan koreksi kelas">'+lbl+'</button>';
+    }
+    // Correction tally shown under a filled field when others proposed a different value.
+    function corrTally(a,field){
+      var list=(a.suggestions&&a.suggestions[field])||[];
+      if(!list.length)return '';
+      return '<div class="text-xs text-amber-700">📝 Usulan koreksi '+CLASS_META[field].label+': '+tallyText(list)+'</div>';
+    }
+
     function submitSuggestion(aid,field,value){
       fetch('/api/directory/'+aid+'/suggest-class',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({field:field,value:value})})
         .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d}})})
@@ -208,15 +222,19 @@ import Layout from "../layouts/Layout.astro";
         var details='';
         if(a.city)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>📍</span>'+a.city+'</div>';
         if(a.job_title)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>💼</span>'+a.job_title+'</div>';
-        if(a.class)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>🎓</span>'+a.class+'</div>';
+        if(a.class)details+='<div class="flex items-center gap-1 text-xs text-stone-500"><span>🎓</span>'+a.class+correctBtn(a,'class')+'</div>';
 
         var extra='';
-        if(a.class1)extra+='<div class="text-xs text-stone-400">📗 Kelas 1: '+a.class1+'</div>';
-        if(a.class2)extra+='<div class="text-xs text-stone-400">📘 Kelas 2: '+a.class2+'</div>';
+        if(a.class1)extra+='<div class="text-xs text-stone-400">📗 Kelas 1: '+a.class1+correctBtn(a,'class1')+'</div>';
+        if(a.class2)extra+='<div class="text-xs text-stone-400">📘 Kelas 2: '+a.class2+correctBtn(a,'class2')+'</div>';
         if(a.university)extra+='<div class="text-xs text-stone-400">🏫 '+a.university+'</div>';
         if(a.hobby)extra+='<div class="text-xs text-stone-400">🎮 '+a.hobby+'</div>';
         if(a.company)extra+='<div class="text-xs text-stone-400">🏢 '+a.company+'</div>';
-        // Crowd-sourced class suggestions for whichever class fields are still empty.
+        // Corrections proposed for FILLED class fields (info might be wrong).
+        if(a.class1)extra+=corrTally(a,'class1');
+        if(a.class2)extra+=corrTally(a,'class2');
+        if(a.class)extra+=corrTally(a,'class');
+        // Crowd-sourced suggestions for whichever class fields are still empty.
         if(!a.class1)extra+=suggestBlock(a,'class1');
         if(!a.class2)extra+=suggestBlock(a,'class2');
         if(!a.class)extra+=suggestBlock(a,'class');
