@@ -18,6 +18,7 @@
 | Profile (auto-match alumni DB, edit, photo upload, completeness nudge) | ✅ | `/profile` |
 | Interactive Globe Map (Mapbox GL) | ✅ | `/map` |
 | Directory (browse alumni, login-gated) | ✅ | `/directory` |
+| Crowd-sourced class suggestions (suggest/correct others' Kelas, tally, admin promote) | ✅ | `/directory`, `/admin` |
 | Statistics / Charts (class stats = registered users only) | ✅ | `/stats` |
 | Articles (cover + inline images/videos, lightbox) | ✅ | `/articles` |
 | Events (RSVP, images, .ics calendar, maps link) | ✅ | `/events` |
@@ -57,7 +58,7 @@
 │   │   ├── login.astro        # Login / signup (Google + email)
 │   │   ├── reset.astro        # Password reset
 │   │   ├── profile.astro      # Profile edit, photo upload, notification toggle
-│   │   ├── map.astro          # Interactive D3 globe map
+│   │   ├── map.astro          # Interactive globe map (Mapbox GL JS v3)
 │   │   ├── directory.astro    # Alumni directory (approved users)
 │   │   ├── stats.astro        # Statistics and charts
 │   │   ├── articles.astro     # Blog ([foto:] + [video:] tags, lightbox)
@@ -65,6 +66,7 @@
 │   │   ├── gallery.astro      # Photo gallery (6 layouts, folder-based)
 │   │   ├── forum.astro        # Discussion forum (categories, threads, reactions)
 │   │   ├── dudu.astro         # Du-Du wall (dari-untuk, mading-style, @mention)
+│   │   ├── terms.astro        # Terms & Conditions (blocking gate for all users)
 │   │   └── admin.astro        # Admin panel
 │   └── layouts/
 │       └── Layout.astro       # HTML shell with PWA meta tags
@@ -95,18 +97,37 @@ ssh -i /path/to/zapa7099_key -p 52017 zapa@103.16.198.61
 
 ## Deploy
 
+`/var/www/alumni` is a git checkout of `origin/main`, so deploying means pushing and
+then running the tracked deploy script on the server:
+
 ```bash
+git push origin main                                          # from your machine
 ssh -i /path/to/zapa7099_key -p 52017 zapa@103.16.198.61
-cd /var/www/alumni
-sudo chown -R zapa:zapa dist/ .astro/
-npm run build
-sudo chown -R www-data:www-data dist/
-sudo rm -rf dist/photos && sudo ln -sf /var/www/alumni/public/photos dist/photos
-sudo systemctl reload nginx
-pm2 restart alumni-api  # if API changed
+cd /var/www/alumni && ./deploy.sh
 ```
 
-> **Note:** `dist/photos` must be recreated as a symlink after every build — the build wipes it.
+`deploy.sh` pulls `origin/main`, re-execs itself if it was updated by that pull,
+runs `npm ci` when `package.json`/`package-lock.json` changed, rebuilds the site,
+fixes permissions, recreates the `dist/photos` symlink, reloads nginx, and restarts
+`alumni-api` only when backend files changed.
+
+> **Edits must go through git** — anything changed directly in a tracked file on the
+> server is wiped by the next `git reset --hard`. Server-only files stay untracked and
+> safe: `ecosystem.config.cjs`, `api/alumni.db`, `backups/`, `dist/`, `public/photos/`.
+
+> **Note:** `dist/photos` must be recreated as a symlink after every build — the build
+> wipes it. `deploy.sh` already does this.
+
+### Server ops
+
+- **DB + photo backups:** `backup-db.sh` runs daily at 03:00 via cron — WAL-safe SQLite
+  snapshot to `backups/`, plus a client-side-encrypted copy of the DB and a mirror of
+  `public/photos/` pushed to Google Drive via `rclone`. Log: `backups/backup.log`.
+- **DNS guard:** Proxmox rewrites `/etc/resolv.conf` on every container start and we
+  don't control that host, so `ensure-dns.timer` re-checks DNS on boot and every 5 min
+  and repairs it if broken. Without it, Telegram / email / geocoding / offsite backups
+  all die silently (they did for 3.5 days in July 2026). Reference copies of the script
+  and units are in `server/`; log: `/var/log/ensure-dns.log`.
 
 ## API Endpoints
 
@@ -119,8 +140,10 @@ pm2 restart alumni-api  # if API changed
 | `/api/auth/complete-registration` | POST | Yes | Post-Google: save name + ≥1 Kelas |
 | `/api/auth/me` | GET | Yes | Current user + profile + `profile_complete` + `missing_fields` |
 | `/api/auth/logout` | POST | No | Clear auth cookie |
-| `/api/auth/forgot` | POST | No | Send password reset email |
-| `/api/auth/reset` | POST | No | Reset password with token |
+| `/api/auth/forgot-password` | POST | No | Send password reset email |
+| `/api/auth/reset-password` | POST | No | Reset password with token |
+| `/api/auth/change-password` | POST | Yes | Change password while logged in |
+| `/api/auth/accept-tos` | POST | Yes | Record Terms & Conditions acceptance |
 
 ### Profile
 | Endpoint | Method | Auth | Description |
@@ -130,7 +153,16 @@ pm2 restart alumni-api  # if API changed
 | `/api/profile/photos` | GET/POST | Approved | Get/upload profile photos |
 | `/api/profile/photos/:id` | DELETE | Approved | Delete a photo |
 | `/api/profile/notifications` | PUT | Approved | Toggle email notifications |
+| `/api/profile/adopt-suggestion` | POST | Approved | Accept a class suggested by others for your own profile |
 | `/api/unsubscribe` | GET | No | One-click unsubscribe via token |
+
+### Directory & class suggestions
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/directory` | GET | Approved | Alumni cards + per-card class suggestions |
+| `/api/alumni/search` | GET | Approved | Search alumni by name |
+| `/api/directory/:id/suggest-class` | POST | Approved | Suggest/correct a class for another alumni (1 vote per user per field) |
+| `/api/directory/:id/suggest-class` | DELETE | Approved | Withdraw your suggestion |
 
 ### Articles
 | Endpoint | Method | Auth | Description |
@@ -155,13 +187,13 @@ pm2 restart alumni-api  # if API changed
 ### Gallery
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/api/gallery/folders` | GET | No | List folders with preview photos + counts |
-| `/api/gallery/folders/:id` | GET | No | List photos in folder |
+| `/api/gallery/folders` | GET | Approved | List folders with preview photos + counts |
+| `/api/gallery/folders/:id` | GET | Approved | List photos in folder |
 | `/api/gallery/folders` | POST | Approved | Create folder |
 | `/api/gallery/folders/:id/photos` | POST | Approved | Upload photos (up to 20) |
 | `/api/gallery/folders/:id/layout` | PUT | Admin | Set default display layout |
 | `/api/gallery/folders/:id` | DELETE | Admin | Delete folder + all photos |
-| `/api/gallery/photos/:id` | DELETE | Admin | Delete single photo |
+| `/api/gallery/photos/:id` | DELETE | Approved | Delete single photo (no ownership check) |
 
 ### Forum
 | Endpoint | Method | Auth | Description |
@@ -194,12 +226,19 @@ pm2 restart alumni-api  # if API changed
 | `/api/admin/pending` | GET | Admin | Pending approval queue |
 | `/api/admin/approve/:id` | POST | Admin | Approve user (auto-geocodes alumni) |
 | `/api/admin/reject/:id` | POST | Admin | Reject user |
-| `/api/admin/alumni` | GET/PUT | Admin | List/edit alumni |
+| `/api/admin/alumni` | GET | Admin | List alumni |
+| `/api/admin/alumni/:id` | PUT | Admin | Edit alumni (auto-geocodes on city change) |
 | `/api/admin/alumni/:id` | DELETE | Admin | Delete alumni |
+| `/api/admin/unlink/:id` | POST | Admin | Unlink a user from its alumni record |
+| `/api/admin/suggestions` | GET | Admin | Class suggestions grouped by alumni, with suggester names |
+| `/api/admin/alumni/:id/promote-class` | POST | Admin | Apply a suggested class to the alumni record |
+| `/api/admin/suggestions/:id` | DELETE | Admin | Delete a suggestion |
 | `/api/admin/articles` | GET | Admin | List all articles |
 | `/api/admin/articles/:id` | DELETE | Admin | Delete any article |
 | `/api/admin/users` | GET/PUT/DELETE | Admin | Manage users |
 | `/api/admin/config` | GET/PUT | Admin | SMTP + Telegram settings |
+| `/api/admin/email-test` | POST | Admin | Send a test email — returns 502 + the real SMTP error on failure |
+| `/api/admin/telegram-test` | POST | Admin | Send a test Telegram message — returns 502 + Telegram's own error on failure |
 | `/api/admin/export` | GET | Admin | Export alumni CSV |
 
 ## Database Tables
@@ -207,7 +246,8 @@ pm2 restart alumni-api  # if API changed
 | Table | Key Columns |
 |-------|-------------|
 | `alumni` | name, city, country, latitude, longitude, job_title, company, class, class1, class2 |
-| `users` | email, role, status, alumni_id, notify_email, unsubscribe_token, reg_class1/2/3 |
+| `users` | email, role, status, alumni_id, notify_email, unsubscribe_token, reg_class1/2/3, tos_accepted_at |
+| `class_suggestions` | target_alumni_id, field, value, suggested_by_user_id — UNIQUE(target, field, by) |
 | `articles` | title, content, status, cover_image, author_id |
 | `events` | title, description, event_date, location, cover_image, created_by |
 | `event_rsvp` | event_id, alumni_id |
@@ -225,4 +265,3 @@ pm2 restart alumni-api  # if API changed
 ## What's NOT Built Yet
 
 - Memorial Page
-- Auto-Geocoding for cities entered via admin panel (currently only on profile save / approval)
