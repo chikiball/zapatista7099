@@ -168,44 +168,100 @@ db.exec(`CREATE TABLE IF NOT EXISTS gallery_photos (
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 )`);
 
-// Telegram notification
+// Telegram notification.
+// Returns a Promise that ALWAYS resolves (never rejects) with { ok, error }, so the
+// fire-and-forget callers stay safe while /api/admin/telegram-test can report the real
+// outcome. The response body must be read: Telegram answers HTTP 200 with
+// {"ok":false,"description":"..."} for a bad token, a wrong chat_id, a bot that was
+// kicked from the group, and for text whose HTML it can't parse (e.g. a raw "&" or "<"
+// in an alumni's name). Silently dropping that response is what hid a 4-day DNS outage.
 function sendTelegram(text) {
-  try {
-    var token = db.prepare("SELECT value FROM config WHERE key = 'telegram_bot_token'").get();
-    var chatId = db.prepare("SELECT value FROM config WHERE key = 'telegram_chat_id'").get();
-    if (!token || !chatId || !token.value || !chatId.value) return;
-    var data = JSON.stringify({ chat_id: chatId.value, text: text, parse_mode: "HTML" });
-    var req = https.request({
-      hostname: "api.telegram.org",
-      path: "/bot" + token.value + "/sendMessage",
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }
-    });
-    req.on("error", function(e) { console.error("Telegram error:", e.message); });
-    req.write(data);
-    req.end();
-  } catch(e) { console.error("Telegram error:", e); }
+  return new Promise(function(resolve) {
+    function fail(msg) {
+      console.error("Telegram error:", msg);
+      resolve({ ok: false, error: msg });
+    }
+    try {
+      var token = db.prepare("SELECT value FROM config WHERE key = 'telegram_bot_token'").get();
+      var chatId = db.prepare("SELECT value FROM config WHERE key = 'telegram_chat_id'").get();
+      if (!token || !chatId || !token.value || !chatId.value) {
+        return fail("Telegram belum dikonfigurasi (bot token / chat id kosong)");
+      }
+      // .trim(): a trailing space or newline pasted into the admin field is invisible in
+      // the UI but turns the URL path into a 404 from Telegram.
+      var data = JSON.stringify({ chat_id: String(chatId.value).trim(), text: text, parse_mode: "HTML" });
+      var req = https.request({
+        hostname: "api.telegram.org",
+        path: "/bot" + String(token.value).trim() + "/sendMessage",
+        method: "POST",
+        timeout: 15000,
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) }
+      }, function(res) {
+        var body = "";
+        res.on("data", function(chunk) { body += chunk; });
+        res.on("end", function() {
+          var parsed = null;
+          try { parsed = JSON.parse(body); } catch(e) { /* non-JSON body */ }
+          if (res.statusCode === 200 && parsed && parsed.ok) return resolve({ ok: true });
+          fail((parsed && parsed.description) ? parsed.description : ("HTTP " + res.statusCode + " " + body.slice(0, 200)));
+        });
+      });
+      req.on("timeout", function() { req.destroy(new Error("timeout setelah 15s")); });
+      req.on("error", function(e) {
+        // EAI_AGAIN/ENOTFOUND here means the server's DNS is broken, not that the
+        // token/chat id are wrong — say so, it's the difference between a 5-minute fix
+        // and hours of re-checking credentials.
+        if (e.code === "EAI_AGAIN" || e.code === "ENOTFOUND") {
+          return fail("DNS gagal (" + e.code + "): server tidak bisa resolve api.telegram.org — cek /etc/resolv.conf");
+        }
+        fail(e.message);
+      });
+      req.write(data);
+      req.end();
+    } catch(e) {
+      fail(String(e && e.message ? e.message : e));
+    }
+  });
 }
 
 
-// Email notification
+// Escape user-supplied text for parse_mode:"HTML". A name like "Tom & Jerry" or "Ana <3"
+// makes Telegram reject the WHOLE message ("can't parse entities"), so every interpolated
+// value below goes through this.
+function tgEsc(v) {
+  return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+
 function sendEmail(to, subject, html) {
-  try {
-    var host = db.prepare("SELECT value FROM config WHERE key = 'smtp_host'").get();
-    var port = db.prepare("SELECT value FROM config WHERE key = 'smtp_port'").get();
-    var user = db.prepare("SELECT value FROM config WHERE key = 'smtp_user'").get();
-    var pass = db.prepare("SELECT value FROM config WHERE key = 'smtp_pass'").get();
-    var from = db.prepare("SELECT value FROM config WHERE key = 'smtp_from'").get();
-    if (!host || !user || !pass) return;
-    var transporter = nodemailer.createTransport({
-      host: host.value, port: parseInt(port ? port.value : "587"),
-      secure: false, auth: { user: user.value, pass: pass.value },
-      tls: { rejectUnauthorized: false }
-    });
-    transporter.sendMail({ from: from ? from.value : user.value, to: to, subject: subject, html: html }, function(err) {
-      if (err) console.error("Email error:", err.message);
-    });
-  } catch(e) { console.error("Email error:", e); }
+  return new Promise(function(resolve) {
+    function fail(msg) {
+      console.error("Email error:", msg);
+      resolve({ ok: false, error: msg });
+    }
+    try {
+      var host = db.prepare("SELECT value FROM config WHERE key = 'smtp_host'").get();
+      var port = db.prepare("SELECT value FROM config WHERE key = 'smtp_port'").get();
+      var user = db.prepare("SELECT value FROM config WHERE key = 'smtp_user'").get();
+      var pass = db.prepare("SELECT value FROM config WHERE key = 'smtp_pass'").get();
+      var from = db.prepare("SELECT value FROM config WHERE key = 'smtp_from'").get();
+      if (!host || !user || !pass) return fail("SMTP belum dikonfigurasi (host/user/pass kosong)");
+      var transporter = nodemailer.createTransport({
+        host: String(host.value).trim(), port: parseInt(port ? port.value : "587"),
+        secure: false, auth: { user: user.value, pass: pass.value },
+        tls: { rejectUnauthorized: false }
+      });
+      transporter.sendMail({ from: from ? from.value : user.value, to: to, subject: subject, html: html }, function(err) {
+        if (!err) return resolve({ ok: true });
+        if (err.code === "EAI_AGAIN" || err.code === "ENOTFOUND") {
+          return fail("DNS gagal (" + err.code + "): server tidak bisa resolve " + String(host.value).trim() + " — cek /etc/resolv.conf");
+        }
+        fail(err.message);
+      });
+    } catch(e) {
+      fail(String(e && e.message ? e.message : e));
+    }
+  });
 }
 
 function sendNewsletterEmail(subject, html) {
@@ -381,11 +437,11 @@ app.post("/api/auth/signup", (req, res) => {
         "Halo " + (name || "Alumni") + ",<br><br>Akun kamu berhasil dibuat. Saat ini akun kamu sedang <b>menunggu persetujuan admin</b>.<br><br>Kamu akan menerima email lagi ketika akun kamu sudah disetujui.",
         "Kunjungi Website", "https://zapa.inweb.id"));
     sendTelegram("🆕 <b>Pendaftaran Baru!</b>\n" +
-      "Nama: " + (name || "-") + "\n" +
-      "Kelas: " + (kelasStr || "-") + "\n" +
-      "Email: " + email + "\n" +
+      "Nama: " + tgEsc(name || "-") + "\n" +
+      "Kelas: " + tgEsc(kelasStr || "-") + "\n" +
+      "Email: " + tgEsc(email) + "\n" +
       "Metode: Email/Password\n" +
-      (match ? "✅ Matched: " + match.name + " (" + (match.nickname||"") + ")\n" : "❌ No alumni match\n") +
+      (match ? "✅ Matched: " + tgEsc(match.name) + " (" + tgEsc(match.nickname||"") + ")\n" : "❌ No alumni match\n") +
       "Status: ⏳ Pending\n" +
       "👉 https://zapa.inweb.id/admin");
     res.json({
@@ -466,11 +522,11 @@ app.post("/api/auth/google", async (req, res) => {
         "Halo " + (name || "Alumni") + ",<br><br>Akun kamu berhasil dibuat. Saat ini akun kamu sedang <b>menunggu persetujuan admin</b>.<br><br>Kamu akan menerima email lagi ketika akun kamu sudah disetujui.",
         "Kunjungi Website", "https://zapa.inweb.id"));
     sendTelegram("🆕 <b>Pendaftaran Baru!</b>\n" +
-        "Nama: " + (name || "-") + "\n" +
+        "Nama: " + tgEsc(name || "-") + "\n" +
         "Kelas: ⏳ menunggu diisi di form\n" +
-        "Email: " + email + "\n" +
+        "Email: " + tgEsc(email) + "\n" +
         "Metode: Google\n" +
-        (alumniMatch ? "✅ Matched: " + alumniMatch.name + " (" + (alumniMatch.nickname||"") + ")\n" : "❌ No alumni match\n") +
+        (alumniMatch ? "✅ Matched: " + tgEsc(alumniMatch.name) + " (" + tgEsc(alumniMatch.nickname||"") + ")\n" : "❌ No alumni match\n") +
         "Status: ⏳ Pending\n" +
         "👉 https://zapa.inweb.id/admin");
     }
@@ -514,11 +570,11 @@ app.post("/api/auth/complete-registration", authMiddleware, (req, res) => {
       const kelasStr = [c1, c2, c3].filter(Boolean).join(" / ");
       const alumniMatch = before.alumni_id ? db.prepare("SELECT name, nickname FROM alumni WHERE id = ?").get(before.alumni_id) : null;
       sendTelegram("✅ <b>Data Pendaftaran Dilengkapi (Google)</b>\n" +
-        "Nama: " + name.trim() + "\n" +
-        "Kelas: " + (kelasStr || "-") + "\n" +
-        "Email: " + before.email + "\n" +
+        "Nama: " + tgEsc(name.trim()) + "\n" +
+        "Kelas: " + tgEsc(kelasStr || "-") + "\n" +
+        "Email: " + tgEsc(before.email) + "\n" +
         "Metode: Google\n" +
-        (alumniMatch ? "✅ Matched: " + alumniMatch.name + " (" + (alumniMatch.nickname||"") + ")\n" : "❌ No alumni match\n") +
+        (alumniMatch ? "✅ Matched: " + tgEsc(alumniMatch.name) + " (" + tgEsc(alumniMatch.nickname||"") + ")\n" : "❌ No alumni match\n") +
         "Status: ⏳ Pending\n" +
         "👉 https://zapa.inweb.id/admin");
     }
@@ -1400,25 +1456,32 @@ app.get("/api/admin/config", adminMiddleware, (req, res) => {
 
 app.put("/api/admin/config", adminMiddleware, (req, res) => {
   var { telegram_bot_token, telegram_chat_id, smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from } = req.body;
-  if (telegram_bot_token !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('telegram_bot_token', ?)").run(telegram_bot_token);
-  if (telegram_chat_id !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('telegram_chat_id', ?)").run(telegram_chat_id);
-  if (smtp_host !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_host', ?)").run(smtp_host);
-  if (smtp_port !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_port', ?)").run(smtp_port);
-  if (smtp_user !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_user', ?)").run(smtp_user);
+  // Trim on the way in — a stray space/newline pasted into a token or host field is
+  // invisible in the admin UI but breaks the request with a confusing error.
+  var t = function(v) { return typeof v === "string" ? v.trim() : v; };
+  if (telegram_bot_token !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('telegram_bot_token', ?)").run(t(telegram_bot_token));
+  if (telegram_chat_id !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('telegram_chat_id', ?)").run(t(telegram_chat_id));
+  if (smtp_host !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_host', ?)").run(t(smtp_host));
+  if (smtp_port !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_port', ?)").run(t(smtp_port));
+  if (smtp_user !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_user', ?)").run(t(smtp_user));
   if (smtp_pass !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_pass', ?)").run(smtp_pass);
-  if (smtp_from !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_from', ?)").run(smtp_from);
+  if (smtp_from !== undefined) db.prepare("INSERT OR REPLACE INTO config VALUES ('smtp_from', ?)").run(t(smtp_from));
   res.json({ success: true });
 });
 
-app.post("/api/admin/email-test", adminMiddleware, (req, res) => {
+app.post("/api/admin/email-test", adminMiddleware, async (req, res) => {
   var admin = db.prepare("SELECT email, name FROM users WHERE id = ?").get(req.user.id);
-  sendEmail(admin.email, "Test Email - Alumni 7099",
+  var r = await sendEmail(admin.email, "Test Email - Alumni 7099",
     emailTemplate("Test Email 🔔", "Jika kamu menerima email ini, konfigurasi SMTP sudah benar!", "Buka Admin", "https://zapa.inweb.id/admin"));
-  res.json({ success: true });
+  if (!r.ok) return res.status(502).json({ error: r.error });
+  res.json({ success: true, sent_to: admin.email });
 });
 
-app.post("/api/admin/telegram-test", adminMiddleware, (req, res) => {
-  sendTelegram("🔔 <b>Test Notification</b>\nBot 7099 Alumni is working!\n👉 https://zapa.inweb.id/admin");
+// Report the REAL result — this used to answer {success:true} before Telegram had even
+// replied, so a broken bot/chat/DNS looked like a working one in the admin UI.
+app.post("/api/admin/telegram-test", adminMiddleware, async (req, res) => {
+  var r = await sendTelegram("🔔 <b>Test Notification</b>\nBot 7099 Alumni is working!\n👉 https://zapa.inweb.id/admin");
+  if (!r.ok) return res.status(502).json({ error: r.error });
   res.json({ success: true });
 });
 

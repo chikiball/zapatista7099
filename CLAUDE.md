@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # 7099 Project Context — For AI Assistants
 
 > Load this file at the start of a new conversation to resume work.
-> Last updated: 2026-07-11
+> Last updated: 2026-07-30
 
 ## What Is This
 
@@ -28,9 +28,10 @@ Browser → https://zapa.inweb.id
 
 ## Tech Stack
 
-- **Astro v6** + **Tailwind CSS v4** (static site, 13 pages)
-- **Express.js** API (`api/server.cjs` — CommonJS)
-- **SQLite** via `better-sqlite3`, **D3.js** + **Canvas** globe, **Chart.js** stats
+- **Astro v6** + **Tailwind CSS v4** (static site, 14 pages)
+- **Express.js** API (`api/server.cjs` — CommonJS, single ~1900-line file)
+- **SQLite** via `better-sqlite3`, **Mapbox GL JS v3** globe (CDN, not an npm dep), **Chart.js** stats
+  - `leaflet` is still in `package.json` but **unused** — the map was migrated to Mapbox GL. Chart.js and Mapbox are loaded from CDN inside the pages, so most deps in `package.json` are the API's, not the frontend's.
 - **JWT** auth + **Google Sign-In**, **nodemailer** SMTP, **multer** + **sharp** uploads
 - **Nominatim** (OpenStreetMap) for auto-geocoding — no API key needed
 - **PM2**, **Node.js v22**
@@ -48,10 +49,47 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 ```
 
 - API reads `alumni.db` from its own dir (`api/`); `better-sqlite3` is synchronous — no `await` on queries.
-- Env vars (all optional, have fallbacks): `JWT_SECRET` (random per-boot if unset → invalidates tokens on restart), `GOOGLE_CLIENT_ID`. SMTP + Telegram creds live in the `config` DB table, set via `/admin`, not env.
+- Env vars: `JWT_SECRET` (optional — random per-boot if unset → invalidates all tokens on restart; set in `ecosystem.config.cjs` on the server). `GOOGLE_CLIENT_ID` is read into a const but **never used** — the real client id is hardcoded in `src/pages/login.astro`. SMTP + Telegram creds live in the `config` DB table, set via `/admin`, not env.
 - Frontend talks to the API via `/api/*`; in prod Nginx proxies that to `:3000`. For local dev you need a matching proxy or to run the built site behind Nginx — Astro's dev server does not proxy `/api` by itself.
-- `npm run build` → `dist/`; `npm run preview` serves the build. There are **no tests or linters** configured.
+- `npm run build` → `dist/`; `npm run preview` serves the build. There are **no tests, linters, or typecheck scripts** — nothing to run to validate a change beyond `npm run build` and `node --check api/server.cjs`. `tsconfig.json` extends `astro/tsconfigs/strict`, but `@astrojs/check` isn't installed, so `astro check` won't run without installing it.
 - `scripts/` has its own `package.json` (CommonJS) — `cd scripts && npm install` before running the one-time importers.
+
+## Code Map & Conventions
+
+**Two halves, no shared code between them.** The frontend is static HTML+inline JS; the backend is one Express file. There is no build step, bundler, or module system on the API side, and no client framework on the frontend side.
+
+### `api/server.cjs` (the whole backend)
+
+- **Layout:** config → DB open/DDL → helpers (email/telegram/geocode) → middlewares → routes, grouped by feature. **Schema DDL is interleaved with routes, not centralized:** `users`/`alumni`/`class_suggestions` at the top (~L27-150), gallery tables ~L154, forum tables ~L1507, du-du tables ~L1789 — each right above its routes. Follow that pattern for a new feature (DDL block, then its routes, at the end of the file).
+- **Migrations are idempotent DDL at boot, not files:** `db.exec("CREATE TABLE IF NOT EXISTS …")` for new tables and `try { db.exec("ALTER TABLE x ADD COLUMN y") } catch(e) {}` for new columns. **Never edit an existing `CREATE TABLE`** — live DBs already have the table, so the change silently never applies. Add an `ALTER` line instead.
+- **Auth gates are three middlewares** — `authMiddleware` (valid JWT), `approvedMiddleware` (JWT + `status='approved'`), `adminMiddleware` (JWT + `role='admin'`). Pick one per route; there is no per-route permission config anywhere else.
+- **Ownership checks are ad hoc,** inside each handler (e.g. articles/forum compare `author_id` to `req.user.id`). Some routes deliberately have none (gallery photo delete) — see the Gallery note below before "fixing" one.
+- **Uploads:** one shared `multer` diskStorage → `public/photos/` (20 MB limit, image filter), then `sharp` resize to max 800px. Deletes `fs.unlinkSync` from the same dir. The DB stores only filenames; the bytes live on disk (that's why backups mirror `public/photos/` separately).
+- `require()` calls appear both at the top and inline mid-file (`require("path")`); style is ES5-ish (`var`/`function`, string concatenation) throughout. Match it rather than modernizing.
+
+### Frontend (`src/`)
+
+- **Every page in `src/pages/` is self-contained**: markup + its own `<script is:inline>` doing `fetch("/api/…", {credentials:"include"})` and DOM assembly by hand. There are **no Astro components, islands, or client frameworks** — `src/components/Welcome.astro` is leftover Astro boilerplate and is not used. `src/styles/global.css` is just `@import 'tailwindcss'`.
+- Inline scripts are written in ES5 style (`var`, `function`, no optional chaining) because they ship unbundled/untranspiled to old in-app WebViews. Keep it that way.
+- **`Layout.astro` is the only shared surface** — cross-cutting concerns belong there and nowhere else: the HTTPS redirect, in-app-browser detection + helpers, the site footer (auto-removed if a page has its own `<footer>`), the T&C blocking gate, PWA/icon meta + `iconV` cache-buster.
+- **The auth-aware nav is duplicated per page** (`#nav-login` / `#nav-welcome` markup + the `/api/auth/me` swap script exist in each page that has a nav). Changing nav behaviour means editing every page — grep `nav-welcome` to find them all.
+- Page-level state is plain globals + `innerHTML`/`createElement`; no shared fetch wrapper, so `credentials:"include"` and `cache:"no-store"` (for `/api/auth/*`) must be repeated at each call site.
+
+### Known rough edges (don't mistake these for bugs to fix silently)
+
+- **`POST /api/auth/google` does not verify the Google credential** — it base64-decodes the JWT payload and trusts `email`/`sub` without checking the signature or `aud`. Any client can mint a payload and be issued a session for an arbitrary email, including an admin's. Fixing it means verifying against Google's JWKS (e.g. `google-auth-library`'s `verifyIdToken` with the client id) — flag it to the user before changing auth behaviour.
+- `server/nginx.conf` in the repo is a **reference copy** of the server's config, not something deploy applies.
+- **`package-lock.json` is untracked, deps use carets** → local `node_modules` drifts from the server's. As of 2026-07-30 a local `npm install` pulled vite 8 / astro 6.4.8, which fails the build with `Missing field 'tsconfigPaths'` from `@tailwindcss/vite`; the server still runs vite 7.3.2 / astro 6.1.8 and builds fine. If a local build fails but the server's succeeds, suspect this before the code.
+
+### Outbound network / DNS (first thing to check when notifications "stop working")
+
+Telegram, SMTP email, Nominatim geocoding, and the rclone offsite backup **all depend on outbound DNS from the LXC container**. When they fail together, it is almost never the credentials.
+
+- **2026-07-27 → 2026-07-30 outage:** `/etc/resolv.conf` pointed at `nameserver 100.100.100.100` (Tailscale MagicDNS) but the container has no `tailscale0` interface and no tailscale binary → every lookup timed out. Telegram, welcome/approval emails, geocoding, and the Google Drive backup push were all dead for ~3.5 days while local DB backups kept succeeding. Fixed by setting `nameserver 1.1.1.1` + `8.8.8.8`; old file saved at `/etc/resolv.conf.bak-20260730`.
+- **`/etc/resolv.conf` is rewritten by Proxmox on container start** (note the `# --- BEGIN PVE ---` markers), so the in-container fix is temporary. The durable fix is the LXC's DNS field on the Proxmox host: `pct set <CTID> --nameserver "1.1.1.1 8.8.8.8"`.
+- Quick triage on the server: `getent hosts api.telegram.org` (fails ⇒ DNS), then `nslookup api.telegram.org 1.1.1.1` (works ⇒ the configured resolver is the problem, not the network).
+- `backups/backup.log` is the best outage timeline — it timestamps every offsite success/failure daily, and its rclone errors name the failing DNS server explicitly.
+
 
 ## Pages (14)
 
@@ -88,7 +126,7 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 - **Profile email field:** `/profile` shows the logged-in account's email in a **read-only, `disabled`** field at the top of the form (populated from `/api/auth/me` → `d.user.email`). It has no `name` attribute, so it's never submitted or editable.
 - **Auth-aware nav (all pages):** on login, `#nav-login` swaps "Masuk" → "Profile" (→ `/profile`) and a `#nav-welcome` span shows "Welcome, `<Name>`" on the **left next to the logo** (`truncate` + `shrink-0` so it survives narrow viewports). Homepage also hides the "Masuk/Daftar" CTAs and shows a **"Profil kamu belum lengkap"** banner listing the missing fields. Profile page shows the same notice and highlights the specific empty `[data-req]` inputs.
 - **Admin:** Dashboard, approval queue, alumni/user management, events management, articles management, settings (SMTP + Telegram)
-- **Telegram:** Bot notifies group on new registration (email/password: one complete alert with name + kelas; Google: a "menunggu" alert on signup + a "Data Pendaftaran Dilengkapi" alert with final name + kelas after the modal — see the Google signup Telegram note above)
+- **Telegram:** Bot notifies group on new registration (email/password: one complete alert with name + kelas; Google: a "menunggu" alert on signup + a "Data Pendaftaran Dilengkapi" alert with final name + kelas after the modal — see the Google signup Telegram note above). `sendTelegram()` returns a Promise that **always resolves** `{ok, error}` (never rejects, so fire-and-forget callers stay safe) and **reads Telegram's response body** — Telegram answers HTTP 200 with `{"ok":false,"description":...}` for a bad token/chat id and for HTML it can't parse. All interpolated user values go through `tgEsc()`; without it a name containing `&` or `<` makes Telegram reject the entire message. `/api/admin/telegram-test` + `/api/admin/email-test` return **502 + the real error** so the admin UI shows the actual cause instead of a blind "sent!".
 - **Email:** Welcome, approval, rejection, password reset, new article/event notifications, forum reply/mention notifications, du-du mention notifications (SMTP: dr6101.inweb.id)
 - **Email notifications:** Broadcast to all approved users with `notify_email=1` via `sendNewsletterEmail()`. One-click unsubscribe via `GET /api/unsubscribe?token=xxx`. Toggle in profile page.
 - **Map:** Mapbox GL JS v3 globe projection (`streets-v12`), red translucent pins, native clustering, login-gated starburst cards, city labels

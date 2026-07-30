@@ -325,14 +325,24 @@ import Layout from "../layouts/Layout.astro";
     });
   }
   function testEmail(){
-    fetch('/api/admin/email-test',{method:'POST',credentials:'include'}).then(function(){
-      var m=document.getElementById('smtp-msg');m.textContent='\ud83d\udce8 Test email sent to your address!';m.className='text-sm text-amber-700';setTimeout(function(){m.className='text-sm hidden'},3000);
-    });
+    var m=document.getElementById('smtp-msg');m.textContent='\u23f3 Mengirim...';m.className='text-sm text-stone-500';
+    fetch('/api/admin/email-test',{method:'POST',credentials:'include'}).then(function(r){
+      return r.json().then(function(d){return {ok:r.ok,d:d}});
+    }).then(function(res){
+      if(res.ok){m.textContent='\ud83d\udce8 Test email terkirim ke '+(res.d.sent_to||'alamat kamu');m.className='text-sm text-green-700';setTimeout(function(){m.className='text-sm hidden'},5000);}
+      else{m.textContent='\u274c Gagal: '+(res.d.error||'unknown error');m.className='text-sm text-red-700';}
+    }).catch(function(e){m.textContent='\u274c Gagal: '+e.message;m.className='text-sm text-red-700';});
   }
   function testTelegram(){
-    fetch('/api/admin/telegram-test',{method:'POST',credentials:'include'}).then(function(){
-      var m=document.getElementById('cfg-msg');m.textContent='📨 Test message sent!';m.className='text-sm text-amber-700';setTimeout(function(){m.className='text-sm hidden'},3000);
-    });
+    var m=document.getElementById('cfg-msg');m.textContent='⏳ Mengirim...';m.className='text-sm text-stone-500';
+    fetch('/api/admin/telegram-test',{method:'POST',credentials:'include'}).then(function(r){
+      return r.json().then(function(d){return {ok:r.ok,d:d}});
+    }).then(function(res){
+      // Show the real Telegram error (bad token, chat not found, DNS failure, ...) —
+      // this used to always claim success, which hid a multi-day outage.
+      if(res.ok){m.textContent='📨 Test message terkirim!';m.className='text-sm text-green-700';setTimeout(function(){m.className='text-sm hidden'},5000);}
+      else{m.textContent='❌ Gagal: '+(res.d.error||'unknown error');m.className='text-sm text-red-700';}
+    }).catch(function(e){m.textContent='❌ Gagal: '+e.message;m.className='text-sm text-red-700';});
   }
   function loadAdminEvents(){
     fetch('/api/events',{credentials:'include'}).then(function(r){return r.json()}).then(function(list){
