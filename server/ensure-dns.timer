@@ -1,0 +1,15 @@
+[Unit]
+Description=Periodically ensure working DNS (Proxmox rewrites resolv.conf on container start)
+Documentation=file:/usr/local/sbin/ensure-dns.sh
+
+[Timer]
+# Catch the Proxmox rewrite right after a container start...
+OnBootSec=15s
+# ...and keep checking, so a mid-life DNS break self-heals within ~5 minutes
+# instead of silently taking out Telegram/email/geocoding/backups for days.
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=ensure-dns.service
+
+[Install]
+WantedBy=timers.target

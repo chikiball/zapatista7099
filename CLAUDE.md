@@ -86,8 +86,13 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 Telegram, SMTP email, Nominatim geocoding, and the rclone offsite backup **all depend on outbound DNS from the LXC container**. When they fail together, it is almost never the credentials.
 
 - **2026-07-27 → 2026-07-30 outage:** `/etc/resolv.conf` pointed at `nameserver 100.100.100.100` (Tailscale MagicDNS) but the container has no `tailscale0` interface and no tailscale binary → every lookup timed out. Telegram, welcome/approval emails, geocoding, and the Google Drive backup push were all dead for ~3.5 days while local DB backups kept succeeding. Fixed by setting `nameserver 1.1.1.1` + `8.8.8.8`; old file saved at `/etc/resolv.conf.bak-20260730`.
-- **`/etc/resolv.conf` is rewritten by Proxmox on container start** (note the `# --- BEGIN PVE ---` markers), so the in-container fix is temporary. The durable fix is the LXC's DNS field on the Proxmox host: `pct set <CTID> --nameserver "1.1.1.1 8.8.8.8"`.
-- Quick triage on the server: `getent hosts api.telegram.org` (fails ⇒ DNS), then `nslookup api.telegram.org 1.1.1.1` (works ⇒ the configured resolver is the problem, not the network).
+- **Proxmox rewrites `/etc/resolv.conf` on every container start** (note the `# --- BEGIN PVE ---` markers) and **we do not control the Proxmox host**, so the proper fix (`pct set <CTID> --nameserver …`) is unavailable. `chattr +i` is also unavailable — this is an unprivileged container with no capabilities (`CapEff: 0000000000000000`).
+- **Therefore: a self-healing guard runs inside the container** (installed 2026-07-30). Tracked reference copies live in `server/`; the live files are:
+  - `/usr/local/sbin/ensure-dns.sh` — probes `api.telegram.org` + `dr6101.inweb.id`; **only if both fail** does it write `1.1.1.1`/`8.8.8.8`. Probing first means a working resolver set by the host admin later is left alone.
+  - `/etc/systemd/system/ensure-dns.{service,timer}` — `OnBootSec=15s` (catches the PVE rewrite after a start) then every `5min` (catches a mid-life break). Log: `/var/log/ensure-dns.log`.
+  - Editing the copies in `server/` does **not** change the server — copy them up and `systemctl daemon-reload`.
+  - **`timeout` on the probe is load-bearing:** against a dead resolver, glibc's retries (×2 again for any `search` domain) make a bare `getent` block ~20s per host, which made the first version run **6m9s** and hang the unit in `activating` — `Type=oneshot` has no default `TimeoutStartSec`. Bounded probe + `TimeoutStartSec=90` fixed it; repair now completes in ~24s.
+- Quick triage on the server: `getent hosts api.telegram.org` (fails ⇒ DNS), then `nslookup api.telegram.org 1.1.1.1` (works ⇒ the configured resolver is the problem, not the network). `sudo cat /var/log/ensure-dns.log` shows every repair the guard has made — **entries there mean PVE reset the config**, which is worth raising with whoever runs the host.
 - `backups/backup.log` is the best outage timeline — it timestamps every offsite success/failure daily, and its rclone errors name the failing DNS server explicitly.
 
 

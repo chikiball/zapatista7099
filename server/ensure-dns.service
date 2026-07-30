@@ -1,0 +1,12 @@
+[Unit]
+Description=Repair /etc/resolv.conf if DNS is broken (Proxmox overwrites it on container start)
+Documentation=file:/usr/local/sbin/ensure-dns.sh
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ensure-dns.sh
+# Type=oneshot defaults to TimeoutStartSec=infinity, so a slow probe would hang the
+# unit in "activating" forever (seen: 6m before it was killed manually). The script
+# bounds itself to ~22s; this is the belt-and-braces backstop.
+TimeoutStartSec=90
