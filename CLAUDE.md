@@ -79,7 +79,7 @@ node api/server.cjs         # Express API — binds 127.0.0.1:3000, opens api/al
 
 - **`POST /api/auth/google` does not verify the Google credential** — it base64-decodes the JWT payload and trusts `email`/`sub` without checking the signature or `aud`. Any client can mint a payload and be issued a session for an arbitrary email, including an admin's. Fixing it means verifying against Google's JWKS (e.g. `google-auth-library`'s `verifyIdToken` with the client id) — flag it to the user before changing auth behaviour.
 - `server/nginx.conf` in the repo is a **reference copy** of the server's config, not something deploy applies.
-- **`package-lock.json` is untracked, deps use carets** → local `node_modules` drifts from the server's. As of 2026-07-30 a local `npm install` pulled vite 8 / astro 6.4.8, which fails the build with `Missing field 'tsconfigPaths'` from `@tailwindcss/vite`; the server still runs vite 7.3.2 / astro 6.1.8 and builds fine. If a local build fails but the server's succeeds, suspect this before the code.
+- **`package-lock.json` is tracked and deploy runs `npm ci`** (since 2026-07-30) — local and server install identical trees. Before that, untracked lockfile + caret ranges let a local `npm install` pull vite 8 / astro 6.4.8, which failed the build with `Missing field 'tsconfigPaths'` from `@tailwindcss/vite` while the server kept building fine on vite 7.3.2 / astro 6.1.8. If a build fails only on one side, check the installed versions before suspecting the code. Local `npm ci` needs **Node 22** (see the Deploy section).
 
 ### Outbound network / DNS (first thing to check when notifications "stop working")
 
@@ -178,7 +178,8 @@ cd /var/www/alumni && ./deploy.sh
 `deploy.sh` does: chown build dirs → `git fetch` + `git reset --hard origin/main` → `npm install` (only if `package.json` changed) → `npm run build` → chown `dist/` to www-data → recreate `dist/photos` symlink → reload nginx → `pm2 restart alumni-api` **only if `api/`, `ecosystem.config.cjs`, or `package.json` changed**. So the normal flow is: commit + `git push` locally, then run `./deploy.sh` on the server.
 
 - **Edits must go through git now** — anything edited directly in a tracked file on the server is wiped by the next `git reset --hard`. Server-only files stay untracked & safe: `ecosystem.config.cjs` (holds `JWT_SECRET`), `api/alumni.db`, `backups/`, `node_modules/`, `dist/`, `public/photos/`.
-- `package-lock.json` is **not** tracked; deploy uses `npm install` (not `npm ci`) when deps change.
+- `package-lock.json` **is tracked** (added 2026-07-30, seeded from the server's working tree) and deploy uses **`npm ci`**, so local and server install byte-identical dependency trees. Don't run a bare `npm install`/`npm update` casually — it re-resolves the caret ranges and reintroduces the drift; if you do change deps, commit the updated lockfile in the same commit.
+- **Local Node must be v22 to build `better-sqlite3`.** The server runs Node v22.22.2; `better-sqlite3@12.9.0` has no prebuilt binary for Node 26, so `npm ci` on a Node 26 machine fails at `node-gyp rebuild`. Use `nvm use 22`, or `npm ci --ignore-scripts` if you only need to build the frontend (the local API won't start without the native binding — `npm rebuild better-sqlite3` under Node 22 fixes it).
 - Manual longhand (if not using the script): `sudo chown -R zapa:zapa dist/ .astro/ && npm run build && sudo chown -R www-data:www-data dist/ && sudo rm -rf dist/photos && sudo ln -sf /var/www/alumni/public/photos dist/photos && sudo systemctl reload nginx && pm2 restart alumni-api`. (There's also a `deploy` bash alias on the server doing the chown+build+reload part, but it predates git and doesn't pull — prefer `./deploy.sh`.)
 
 ### DB backups
